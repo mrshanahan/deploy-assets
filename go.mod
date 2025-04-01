@@ -1,8 +1,6 @@
 module github.com/mrshanahan/deploy-assets
 
-go 1.23.0
-
-toolchain go1.23.7
+go 1.23.7
 
 require (
 	github.com/pkg/errors v0.9.1

@@ -2,75 +2,65 @@ package main
 
 import (
 	"flag"
-	"log"
+	"log/slog"
 	"os"
 
-	"github.com/mrshanahan/deploy-assets/internal/docker"
-	"github.com/mrshanahan/deploy-assets/internal/localproc"
-	"github.com/mrshanahan/deploy-assets/internal/ssh"
+	"github.com/mrshanahan/deploy-assets/internal/config"
+	"github.com/mrshanahan/deploy-assets/internal/executor"
+	"github.com/mrshanahan/deploy-assets/internal/provider"
+	"github.com/mrshanahan/deploy-assets/internal/transport"
 )
 
 func main() {
 	var serverParam *string = flag.String("server", "", "remote server to connect to")
 	var userParam *string = flag.String("user", "", "user to authenticate with")
 	var keyParam *string = flag.String("key-path", "", "path to the private key")
+	var debugParam *bool = flag.Bool("debug", false, "Enables debug logging")
+	var dryRunParam *bool = flag.Bool("dry-run", false, "Performs a dry run (no actual copies)")
 	flag.Parse()
 
 	if *serverParam == "" {
-		log.Fatalf("-server param required")
+		slog.Error("-server param required")
 		os.Exit(1)
 	}
 	if *userParam == "" {
-		log.Fatalf("-user param required")
+		slog.Error("-user param required")
 		os.Exit(1)
 	}
 	if *keyParam == "" {
-		log.Fatalf("-key-path param required")
+		slog.Error("-key-path param required")
 		os.Exit(1)
 	}
+	if *debugParam {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+	}
 
-	client, err := ssh.OpenSSHConnection(*serverParam, *userParam, *keyParam)
+	localExec := executor.NewLocalExecutor("local")
+	defer localExec.Close()
+
+	sshExec, err := executor.NewSSHExecutor("quemot.dev", *serverParam, *userParam, *keyParam, true)
 	if err != nil {
-		log.Fatalf("unable to open connection to %s@%s using key %s: %v", *userParam, *serverParam, *keyParam, err)
+		slog.Error("failed to create SSH executor", "err", err)
 		os.Exit(1)
 	}
-	defer client.Close()
+	defer sshExec.Close()
 
-	remoteResult, err := client.ExecuteCommand("sudo docker image ls --format '{{ .Repository }},{{ .ID }},{{ .CreatedAt }}' 'notes-api/*'")
-	if err != nil {
-		log.Fatalf("unable to execute remote command: %v", err)
-		os.Exit(1)
-	}
-	remoteEntries, err := docker.ParseDockerImageEntries(remoteResult)
-	if err != nil {
-		log.Fatalf("failed to parse remote `docker image ls` entries: %v", err)
-		os.Exit(1)
-	}
-
-	stdout, _, err := localproc.ExecuteCommand("docker", "image", "ls", "--format", "{{ .Repository }},{{ .ID }},{{ .CreatedAt }}", "notes-api/*")
-	if err != nil {
-		log.Fatalf("unable to execute local command: %v", err)
-		os.Exit(1)
-	}
-	localEntries, err := docker.ParseDockerImageEntries(stdout)
-	if err != nil {
-		log.Fatalf("failed to parse local `docker image ls` entries: %v", err)
-		os.Exit(1)
-	}
-
-	remoteEntriesMap := make(map[string]*docker.DockerImageEntry)
-	for _, e := range remoteEntries {
-		remoteEntriesMap[e.Repository] = e
-	}
-
-	localEntriesMap := make(map[string]*docker.DockerImageEntry)
-	for _, e := range localEntries {
-		localEntriesMap[e.Repository] = e
-	}
-
-	for k, v := range remoteEntriesMap {
-		if e, exists := localEntriesMap[k]; exists && e.ID != v.ID {
-			log.Printf("Image mismatch on %s: local=%s, remote=%s\n", k, v.ID, e.ID)
-		}
+	transport := transport.NewS3Transport("s3://quemot-dev-bucket/deploy-assets")
+	// dirProvider := provider.NewDirProvider("/home/matt/repos/notes-service/package-files", "/home/ubuntu/package")
+	// if err = dirProvider.Sync(config.SyncConfig{
+	dockerProvider := provider.NewDockerProvider(
+		"notes-api/auth",
+		"notes-api/auth-db",
+		"notes-api/auth-cli",
+		"notes-api/api",
+		"notes-api/web",
+	)
+	if err = dockerProvider.Sync(config.SyncConfig{
+		SrcExecutor: localExec,
+		DstExecutor: sshExec,
+		Transport:   transport,
+		DryRun:      *dryRunParam,
+	}); err != nil {
+		slog.Error("failed to run sync", "err", err)
 	}
 }
