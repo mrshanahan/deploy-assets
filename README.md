@@ -88,4 +88,13 @@ This is currently a single object rather than a collection. All transport types 
 - SSH interactions currently use `bash` by default. There is currently no way to specify another shell; you will have to modify it yourself.
 - Not a lot of sophisticated command-line quoting or escaping is done, and command lines are build slightly differently between local & SSH executors. Proceed at your own risk.
 
+## Development
 
+This tool uses the standard Go project layout, so just `go run` or `go build` the main file in [`cmd/`](./cmd):
+
+    $ go run ./cmd/deploy-assets.go
+    $ go build ./cmd/deploy-assets.go
+
+There are limited unit tests for the manifest parsing as well:
+
+    $ go test ./internal/manifest
