@@ -81,24 +81,24 @@ func TestParseManifest(t *testing.T) {
 		errFunc      func(any) error
 	}{
 		{"{}", isNil, and(
-			containsText("required top-level key 'servers'"),
+			containsText("required top-level key 'locations'"),
 			containsText("required top-level key 'transport'"),
 			containsText("required top-level key 'assets'"))},
-		{"{\"servers\": []}", isNil, and(
-			not(containsText("required top-level key 'servers'")),
+		{"{\"locations\": []}", isNil, and(
+			not(containsText("required top-level key 'locations'")),
 			containsText("required top-level key 'transport'"),
 			containsText("required top-level key 'assets'"))},
 		{"{\"transport\": {}}", isNil, and(
-			containsText("required top-level key 'servers'"),
+			containsText("required top-level key 'locations'"),
 			not(containsText("required top-level key 'transport'")),
 			containsText("required top-level key 'assets'"))},
 		{"{\"assets\": []}", isNil, and(
-			containsText("required top-level key 'servers'"),
+			containsText("required top-level key 'locations'"),
 			containsText("required top-level key 'transport'"),
 			not(containsText("required top-level key 'assets'")))},
 		{"{\"assets\": {}}", isNil, containsText("top-level entry should be array of objects")},
-		{"{\"servers\": [], \"transport\": {\"type\": \"foo\"}, \"assets\": []}", isNil, containsText("transport: unrecognized type 'foo'")},
-		{"{\"servers\": [{ \"type\": \"local\", \"path\": 1 }, { \"type\": \"ssh\" }], \"transport\": {\"type\": \"s3\", \"bucket_url\": \"s3://test\"}, \"assets\": []}", isNotNil, isNil},
+		{"{\"locations\": [], \"transport\": {\"type\": \"foo\"}, \"assets\": []}", isNil, containsText("transport: unrecognized type 'foo'")},
+		{"{\"locations\": [{ \"type\": \"local\", \"name\": \"local\" }, { \"type\": \"ssh\", \"name\": \"remote\", \"server\": \"foo.com:22\", \"username\": \"test\", \"key_file\": \"/home/test/.ssh/key.pem\" }], \"transport\": {\"type\": \"s3\", \"bucket_url\": \"s3://test\"}, \"assets\": [{ \"type\": \"dir\", \"src\": \"local\", \"dst\": \"remote\", \"src_path\": \"package\", \"dst_path\": \"/etc/package\" }]}", isNotNil, isNil},
 	}
 
 	for _, test := range tests {

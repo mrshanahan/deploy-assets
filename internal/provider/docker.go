@@ -12,15 +12,19 @@ import (
 	"github.com/pkg/errors"
 )
 
-func NewDockerProvider(repositories ...string) config.Provider {
+func NewDockerProvider(name string, repositories ...string) config.Provider {
 	return &dockerProvider{
+		name:         name,
 		repositories: repositories,
 	}
 }
 
 type dockerProvider struct {
+	name         string
 	repositories []string
 }
+
+func (p *dockerProvider) Name() string { return p.name }
 
 // TODO: Clean up old temp folders (?)
 func (p *dockerProvider) Sync(config config.SyncConfig) error {

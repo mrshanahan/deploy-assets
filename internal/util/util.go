@@ -19,12 +19,20 @@ func GetTempFilePath(prefix string) string {
 	return path
 }
 
-func GetKeys[K comparable, V any](m map[K]V) []K {
+func Keys[K comparable, V any](m map[K]V) []K {
 	keys := []K{}
 	for k, _ := range m {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+func Values[K comparable, V any](m map[K]V) []V {
+	values := []V{}
+	for _, v := range m {
+		values = append(values, v)
+	}
+	return values
 }
 
 type Set[T comparable] struct {
@@ -52,4 +60,23 @@ func Map[S any, T any](xs []S, f func(S) T) []T {
 		ys = append(ys, f(x))
 	}
 	return ys
+}
+
+func Filter[T any](xs []T, p func(T) bool) []T {
+	ys := []T{}
+	for _, x := range xs {
+		if p(x) {
+			ys = append(ys, x)
+		}
+	}
+	return ys
+}
+
+func All[T any](xs []T, p func(T) bool) bool {
+	for _, x := range xs {
+		if !p(x) {
+			return false
+		}
+	}
+	return true
 }

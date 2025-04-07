@@ -4,14 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/mrshanahan/deploy-assets/internal/util"
 )
 
 type ManifestNode struct {
-	Kinds []*KindNode
+	Kinds map[string]*KindNode
 }
 
 type KindNode struct {
@@ -26,8 +28,52 @@ type ItemNode struct {
 type AttributeNode struct {
 	Name              string
 	MatchingValueType string
-	Value             any
 	Present           bool
+	value             any
+}
+
+// We're going to (unwisely) assume this is used safely to avoid some
+// code duplication.
+
+// TODO: Transform the underlying values into correct one for return (spec. []object & []string)
+// before returning so simple casts can work
+func (a *AttributeNode) GetValue() any {
+	if a.MatchingValueType == "string" {
+		valStr := a.value.(string)
+		finalVal := subVarValue(valStr)
+		return finalVal
+	}
+	if a.MatchingValueType == "[]string" {
+		valStrs := util.Map(a.value.([]any), func(x any) string { return x.(string) })
+		finalValStrs := []string{}
+		for _, v := range valStrs {
+			finalValStrs = append(finalValStrs, subVarValue(v))
+		}
+		return finalValStrs
+	}
+	return a.value
+}
+
+var (
+	envVarPatt *regexp.Regexp = regexp.MustCompile("{{ (.*?) }}")
+)
+
+func subVarValue(s string) string {
+	matches := envVarPatt.FindAllStringSubmatchIndex(s, -1)
+	if matches == nil {
+		return s
+	}
+	finalVal := s
+	for _, matchIndices := range matches {
+		wholeStart, wholeEnd := matchIndices[0], matchIndices[1]
+		subStart, subEnd := matchIndices[2], matchIndices[3]
+		varName := s[subStart:subEnd]
+		varVal, prs := os.LookupEnv(varName)
+		if prs {
+			finalVal = fmt.Sprintf("%s%s%s", finalVal[:wholeStart], varVal, finalVal[wholeEnd:])
+		}
+	}
+	return finalVal
 }
 
 func ParseManifest(raw []byte) (*ManifestNode, error) {
@@ -37,7 +83,7 @@ func ParseManifest(raw []byte) (*ManifestNode, error) {
 	}
 
 	manifestNode := &ManifestNode{
-		Kinds: []*KindNode{},
+		Kinds: map[string]*KindNode{},
 	}
 
 	errs := []error{}
@@ -101,7 +147,7 @@ func ParseManifest(raw []byte) (*ManifestNode, error) {
 			}
 		}
 
-		manifestNode.Kinds = append(manifestNode.Kinds, kindNode)
+		manifestNode.Kinds[kindName] = kindNode
 	}
 
 	if len(errs) > 0 {
@@ -154,7 +200,7 @@ func buildItemNode(itemJson map[string]any, itemSpecs map[string]ManifestItemSpe
 		attrNode := &AttributeNode{
 			Name:              attr.Name,
 			MatchingValueType: matchingType,
-			Value:             attrValue,
+			value:             attrValue,
 			Present:           prs,
 		}
 
@@ -218,21 +264,28 @@ func checkValueType(v any, types []string) (string, error) {
 				validType = t
 			}
 		case "[]string":
-			_, ok := v.([]string)
-			if ok && validType == "" {
-				validType = t
+			vs, ok := v.([]any)
+			if ok {
+				allStrings := util.All(vs, func(x any) bool { _, ok := x.(string); return ok })
+				if allStrings && validType == "" {
+					validType = t
+				}
 			}
 		case "[]object":
-			_, ok := v.([]any)
-			if ok && validType == "" {
-				validType = t
+			vs, ok := v.([]any)
+			if ok {
+				allObjects := util.All(vs, func(x any) bool { _, ok := x.(map[string]any); return ok })
+				if allObjects && validType == "" {
+					validType = t
+				}
 			}
 		default:
 			panic(fmt.Sprintf("invalid attribute type: %s", t))
 		}
 	}
 	if validType == "" {
-		return "", fmt.Errorf("invalid value type (value: %v; accepted types: %v)", v, types)
+		actualType := reflect.TypeOf(v)
+		return "", fmt.Errorf("invalid value type (value: %v; accepted types: %v; actual type: %v)", v, types, actualType)
 	}
 	return validType, nil
 }

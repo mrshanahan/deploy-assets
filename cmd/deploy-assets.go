@@ -2,65 +2,96 @@ package main
 
 import (
 	"flag"
+	"io"
 	"log/slog"
 	"os"
 
 	"github.com/mrshanahan/deploy-assets/internal/config"
-	"github.com/mrshanahan/deploy-assets/internal/executor"
-	"github.com/mrshanahan/deploy-assets/internal/provider"
-	"github.com/mrshanahan/deploy-assets/internal/transport"
+	"github.com/mrshanahan/deploy-assets/internal/manifest"
+	"github.com/mrshanahan/deploy-assets/internal/util"
 )
 
 func main() {
-	var serverParam *string = flag.String("server", "", "remote server to connect to")
-	var userParam *string = flag.String("user", "", "user to authenticate with")
-	var keyParam *string = flag.String("key-path", "", "path to the private key")
+	var manifestParam *string = flag.String("manifest", "", "local manifest to use for deployment")
 	var debugParam *bool = flag.Bool("debug", false, "Enables debug logging")
 	var dryRunParam *bool = flag.Bool("dry-run", false, "Performs a dry run (no actual copies)")
+	var continueOnErrorParam *bool = flag.Bool("continue-on-error", false, "If a particular asset fails, continue with remaining")
 	flag.Parse()
 
-	if *serverParam == "" {
-		slog.Error("-server param required")
-		os.Exit(1)
-	}
-	if *userParam == "" {
-		slog.Error("-user param required")
-		os.Exit(1)
-	}
-	if *keyParam == "" {
-		slog.Error("-key-path param required")
+	if *manifestParam == "" {
+		slog.Error("-manifest param required")
 		os.Exit(1)
 	}
 	if *debugParam {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 	}
 
-	localExec := executor.NewLocalExecutor("local")
-	defer localExec.Close()
-
-	sshExec, err := executor.NewSSHExecutor("quemot.dev", *serverParam, *userParam, *keyParam, true)
+	manifestFile, err := os.Open(*manifestParam)
 	if err != nil {
-		slog.Error("failed to create SSH executor", "err", err)
+		slog.Error("failed to open manifest file", "path", *manifestParam, "err", err)
 		os.Exit(1)
 	}
-	defer sshExec.Close()
+	manifestBytes, err := io.ReadAll(manifestFile)
+	if err != nil {
+		slog.Error("failed to read manifest file", "path", *manifestParam, "err", err)
+		os.Exit(1)
+	}
 
-	transport := transport.NewS3Transport("s3://quemot-dev-bucket/deploy-assets")
-	// dirProvider := provider.NewDirProvider("/home/matt/repos/notes-service/package-files", "/home/ubuntu/package")
-	// if err = dirProvider.Sync(config.SyncConfig{
-	dockerProvider := provider.NewDockerProvider(
-		"notes-api/auth",
-		"notes-api/auth-db",
-		"notes-api/auth-cli",
-		"notes-api/api",
-		"notes-api/web",
-	)
-	if err = dockerProvider.Sync(config.SyncConfig{
-		SrcExecutor: localExec,
-		DstExecutor: sshExec,
-		Transport:   transport,
-		DryRun:      *dryRunParam,
-	}); err != nil {
-		slog.Error("failed to run sync", "err", err)
+	parsedManifest, err := manifest.ParseManifest(manifestBytes)
+	if err != nil {
+		slog.Error("failed to parse manifest file", "path", *manifestParam, "err", err)
+		os.Exit(1)
+	}
+
+	manifest, err := manifest.BuildManifest(parsedManifest)
+	if err != nil {
+		slog.Error("failed to configure application from manifest", "path", *manifestParam, "err", err)
+		os.Exit(1)
+	}
+
+	for _, providerConfig := range manifest.Providers {
+		src, dst := providerConfig.Src, providerConfig.Dst
+		srcExecutor := manifest.Executors[src]
+		var dstExecutors []config.Executor
+		if dst == "*" {
+			dstExecutors = util.Filter(util.Values(manifest.Executors), func(e config.Executor) bool { return e.Name() != src })
+		} else {
+			dstExecutors = []config.Executor{manifest.Executors[dst]}
+		}
+
+		for _, dstExecutor := range dstExecutors {
+			if err := providerConfig.Provider.Sync(config.SyncConfig{
+				SrcExecutor: srcExecutor,
+				DstExecutor: dstExecutor,
+				Transport:   manifest.Transport,
+				DryRun:      *dryRunParam,
+			}); err != nil {
+				slog.Error("failed to sync asset",
+					"asset", providerConfig.Provider.Name(),
+					"src", srcExecutor.Name(),
+					"dst", dstExecutor.Name(),
+					"err", err)
+				if !*continueOnErrorParam {
+					os.Exit(1)
+				} else {
+					slog.Warn("continuing despite error")
+				}
+			}
+		}
+
 	}
 }
+
+// func tryGetManifestPath() (string, error) {
+// 	cwd, err := os.Getwd()
+// 	if err != nil {
+// 		return "", err
+// 	}
+
+// 	dirEntries, err := os.ReadDir(cwd)
+// 	if err != nil {
+// 		return "", err
+// 	}
+
+// 	explicitManifestEntries :=
+// }

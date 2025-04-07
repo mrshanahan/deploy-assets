@@ -3,11 +3,11 @@ package manifest
 func NewManifestSpec() *ManifestSpec {
 	return &ManifestSpec{
 		Kinds: []ManifestKindSpec{
-			&ServerKindSpec{
+			&LocationKindSpec{
 				GenericKindSpec: GenericKindSpec{
 					itemSpecs: []ManifestItemSpec{
-						&LocalServerItemSpec{},
-						&SSHServerItemSpec{},
+						&LocalLocationItemSpec{},
+						&SSHLocationItemSpec{},
 					},
 				},
 			},
@@ -52,13 +52,13 @@ func (s *GenericKindSpec) ItemSpecs() map[string]ManifestItemSpec {
 	return m
 }
 
-type ServerKindSpec struct {
+type LocationKindSpec struct {
 	GenericKindSpec
 }
 
-func (s *ServerKindSpec) Name() string { return "servers" }
+func (s *LocationKindSpec) Name() string { return "locations" }
 
-func (s *ServerKindSpec) IsCollection() bool { return true }
+func (s *LocationKindSpec) IsCollection() bool { return true }
 
 type TransportKindSpec struct {
 	GenericKindSpec
@@ -93,32 +93,36 @@ func GetDefaultItemAttributes() []AttributeSpec {
 	}
 }
 
-type LocalServerItemSpec struct {
+type LocalLocationItemSpec struct {
 	Path string
 }
 
-func (s *LocalServerItemSpec) Type() string { return "local" }
+func GetDefaultLocationItemAttributes() []AttributeSpec {
+	return []AttributeSpec{
+		AttributeSpec{"name", "string", true},
+	}
+}
 
-func (s *LocalServerItemSpec) Attributes() []AttributeSpec {
+func (s *LocalLocationItemSpec) Type() string { return "local" }
+
+func (s *LocalLocationItemSpec) Attributes() []AttributeSpec {
 	return append(
-		GetDefaultItemAttributes(),
-		[]AttributeSpec{
-			AttributeSpec{"path", "string", true},
-		}...,
+		GetDefaultLocationItemAttributes(),
+		[]AttributeSpec{}...,
 	)
 }
 
-type SSHServerItemSpec struct{}
+type SSHLocationItemSpec struct{}
 
-func (s *SSHServerItemSpec) Type() string { return "ssh" }
+func (s *SSHLocationItemSpec) Type() string { return "ssh" }
 
-func (s *SSHServerItemSpec) Attributes() []AttributeSpec {
+func (s *SSHLocationItemSpec) Attributes() []AttributeSpec {
 	return append(
-		GetDefaultItemAttributes(),
+		GetDefaultLocationItemAttributes(),
 		[]AttributeSpec{
 			AttributeSpec{"server", "string", true},
 			AttributeSpec{"username", "string", true},
-			AttributeSpec{"key_path", "string", true},
+			AttributeSpec{"key_file", "string", true},
 			AttributeSpec{"run_elevated", "bool", false}, // TODO: specify default value?
 		}...,
 	)
@@ -139,11 +143,21 @@ func (s *S3TransportItemSpec) Attributes() []AttributeSpec {
 
 type DirAssetItemSpec struct{}
 
+func GetDefaultAssetItemAttributes() []AttributeSpec {
+	return append(
+		GetDefaultItemAttributes(),
+		[]AttributeSpec{
+			AttributeSpec{"src", "string", true},
+			AttributeSpec{"dst", "string", true},
+		}...,
+	)
+}
+
 func (s *DirAssetItemSpec) Type() string { return "dir" }
 
 func (s *DirAssetItemSpec) Attributes() []AttributeSpec {
 	return append(
-		GetDefaultItemAttributes(),
+		GetDefaultAssetItemAttributes(),
 		[]AttributeSpec{
 			AttributeSpec{"src_path", "string", true},
 			AttributeSpec{"dst_path", "string", true},
@@ -157,7 +171,7 @@ func (s *DockerImageAssetItemSpec) Type() string { return "docker_image" }
 
 func (s *DockerImageAssetItemSpec) Attributes() []AttributeSpec {
 	return append(
-		GetDefaultItemAttributes(),
+		GetDefaultAssetItemAttributes(),
 		[]AttributeSpec{
 			AttributeSpec{"repository", "string|[]string", true},
 		}...,

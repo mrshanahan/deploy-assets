@@ -9,11 +9,12 @@ import (
 	"github.com/mrshanahan/deploy-assets/internal/util"
 )
 
-func NewS3Transport(bucketUrl string) config.Transport {
-	return &s3Transport{bucketUrl}
+func NewS3Transport(name string, bucketUrl string) config.Transport {
+	return &s3Transport{name, bucketUrl}
 }
 
 type s3Transport struct {
+	name      string
 	bucketUrl string
 }
 

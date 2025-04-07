@@ -21,7 +21,14 @@ type SyncConfig struct {
 }
 
 type Provider interface {
+	Name() string
 	Sync(config SyncConfig) error
+}
+
+type ProviderConfig struct {
+	Provider Provider
+	Src      string
+	Dst      string
 }
 
 type Transport interface {

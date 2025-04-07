@@ -12,11 +12,12 @@ import (
 	"github.com/mrshanahan/deploy-assets/internal/util"
 )
 
-func NewDirProvider(srcPath, dstPath string) config.Provider {
-	return &dirProvider{srcPath, dstPath, make(map[string]*fileEntry), make(map[string]map[string]*fileEntry)}
+func NewDirProvider(name, srcPath, dstPath string) config.Provider {
+	return &dirProvider{name, srcPath, dstPath, make(map[string]*fileEntry), make(map[string]map[string]*fileEntry)}
 }
 
 type dirProvider struct {
+	name       string
 	srcPath    string
 	dstPath    string
 	srcEntries map[string]*fileEntry
@@ -70,6 +71,8 @@ func loadFileEntries(dirPath string, executor config.Executor) (map[string]*file
 	}
 	return entries, nil
 }
+
+func (p *dirProvider) Name() string { return p.name }
 
 // TODO: Combine tmp file usage, both in code & on system
 func (p *dirProvider) Sync(config config.SyncConfig) error {
