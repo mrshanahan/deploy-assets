@@ -45,9 +45,9 @@ func (p *dockerProvider) Sync(config config.SyncConfig) error {
 	}
 
 	if config.DryRun {
-		slog.Info("DRY RUN: copying images:", "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name())
+		slog.Info("DRY RUN: copying images", "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name())
 		for _, e := range entriesToTransfer {
-			slog.Info("DRY RUN:", "entry", e)
+			slog.Info("DRY RUN: copy", "image", e)
 		}
 		return nil
 	}

@@ -93,12 +93,19 @@ func (p *dirProvider) Sync(config config.SyncConfig) error {
 	}
 
 	if config.DryRun {
-		slog.Info("DRY RUN: copying files:", "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name(), "num-files", len(entriesToTransfer))
+		slog.Info("DRY RUN: copying files", "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name(), "num-files", len(entriesToTransfer))
 		for _, e := range entriesToTransfer {
-			slog.Info("file to transfer",
+			var dstModifiedAtStr string
+			dstEntry, prs := dstEntries[e.truncPath]
+			if !prs {
+				dstModifiedAtStr = ""
+			} else {
+				dstModifiedAtStr = dstEntry.modifiedAt.Format(time.RFC3339)
+			}
+			slog.Info("DRY RUN: copy",
 				"trunc-path", e.truncPath,
 				"src-modified-at", e.modifiedAt.Format(time.RFC3339),
-				"dst-modified-at", dstEntries[e.truncPath].modifiedAt.Format(time.RFC3339))
+				"dst-modified-at", dstModifiedAtStr)
 		}
 
 		return nil
