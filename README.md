@@ -95,6 +95,12 @@ This tool uses the standard Go project layout, so just `go run` or `go build` th
     $ go run ./cmd/deploy-assets.go
     $ go build ./cmd/deploy-assets.go
 
-There are limited unit tests for the manifest parsing as well:
+A Makefile is provided that will run basic commands, including installing the binary in your home directory's `bin`. (This is not system-agnosotic.)
 
-    $ go test ./internal/manifest
+    $ make              # Builds executable
+    $ make build        # Same as above
+    $ make run          # Default go run
+    $ make test         # Runs all known tests
+    $ make install      # Builds binary to ~/bin/deploy-assets
+    $ make install \    # Override default install directory
+        INSTALL_DIR=/usr/local/bin
