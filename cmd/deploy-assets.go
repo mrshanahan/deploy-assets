@@ -59,7 +59,24 @@ func main() {
 			dstExecutors = []config.Executor{manifest.Executors[dst]}
 		}
 
+		if err := manifest.Transport.Validate(srcExecutor); err != nil {
+			slog.Error("failed to validate transport accessibility from source",
+				"src", src,
+				"err", err)
+			os.Exit(1)
+		}
 		for _, dstExecutor := range dstExecutors {
+			if err := manifest.Transport.Validate(dstExecutor); err != nil {
+				slog.Error("failed to validate transport accessibility from destination",
+					"dst", dstExecutor.Name(),
+					"err", err)
+				if !*continueOnErrorParam {
+					os.Exit(1)
+				} else {
+					slog.Warn("continuing with remaining destinations despite error")
+				}
+			}
+
 			if err := providerConfig.Provider.Sync(config.SyncConfig{
 				SrcExecutor: srcExecutor,
 				DstExecutor: dstExecutor,
@@ -74,7 +91,7 @@ func main() {
 				if !*continueOnErrorParam {
 					os.Exit(1)
 				} else {
-					slog.Warn("continuing despite error")
+					slog.Warn("continuing with remaining destinations despite error")
 				}
 			}
 		}

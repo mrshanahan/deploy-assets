@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 
@@ -18,24 +17,15 @@ type s3Transport struct {
 	bucketUrl string
 }
 
-func (t *s3Transport) Validate(config config.Config) error {
-	errs := []error{}
-	src := config.SrcExecutor
-	if err := ValidateAWSCLIInstallation(src); err != nil {
-		errs = append(errs, fmt.Errorf("Source '%s' does not have AWS CLI ('aws') available on PATH; install or update PATH & try again", src.Name()))
-	} else if err := ValidateAWSCLILogin(src); err != nil {
-		errs = append(errs, fmt.Errorf("Source '%s' is not authenticated with S3; authenticate & try again", src.Name()))
+func (t *s3Transport) Validate(exec config.Executor) error {
+	if err := ValidateAWSCLIInstallation(exec); err != nil {
+		return fmt.Errorf("location '%s' does not have AWS CLI ('aws') available on PATH; install or update PATH & try again", exec.Name())
+	}
+	if err := ValidateAWSCLILogin(exec); err != nil {
+		return fmt.Errorf("location '%s' is not authenticated with S3; authenticate & try again", exec.Name())
 	}
 
-	for _, dst := range config.DstExecutors {
-		if err := ValidateAWSCLIInstallation(dst); err != nil {
-			errs = append(errs, fmt.Errorf("Destination '%s' does not have AWS CLI ('aws') available on PATH; install or update PATH & try again", dst.Name()))
-		} else if err := ValidateAWSCLILogin(dst); err != nil {
-			errs = append(errs, fmt.Errorf("Destination '%s' is not authenticated with S3; authenticate & try again", dst.Name()))
-		}
-	}
-
-	return errors.Join(errs...)
+	return nil
 }
 
 func ValidateAWSCLIInstallation(e config.Executor) error {

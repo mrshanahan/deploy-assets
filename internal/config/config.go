@@ -1,11 +1,5 @@
 package config
 
-type Config struct {
-	SrcExecutor  Executor
-	DstExecutors map[string]Executor
-	Transport    Transport
-}
-
 type Executor interface {
 	Name() string
 	ExecuteCommand(name string, args ...string) (string, string, error)
@@ -32,6 +26,6 @@ type ProviderConfig struct {
 }
 
 type Transport interface {
-	Validate(config Config) error
+	Validate(exec Executor) error
 	TransferFile(src Executor, srcPath string, dst Executor, dstPath string) error
 }
