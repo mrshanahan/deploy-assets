@@ -120,9 +120,10 @@ func (p *dirProvider) Sync(config config.SyncConfig) error {
 	}
 	defer config.SrcExecutor.ExecuteCommand("rm", "-rf", tempFolderPath)
 
+	srcName := config.SrcExecutor.Name()
 	dstName := config.DstExecutor.Name()
 
-	slog.Info("syncing files to remote", "remote", dstName)
+	slog.Info("syncing files", "src", srcName, "dst", dstName, "num-files", len(entriesToTransfer))
 	for _, e := range entriesToTransfer {
 		dir := filepath.Dir(e.truncPath)
 		targetDir := filepath.Join(tempPackageFolderPath, dir)

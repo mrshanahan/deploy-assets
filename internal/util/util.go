@@ -80,3 +80,21 @@ func All[T any](xs []T, p func(T) bool) bool {
 	}
 	return true
 }
+
+func HumanReadableSize(bytes int64) string {
+	units := []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"}
+	unitIdx := 0
+	coeff := float64(bytes)
+	for coeff >= 1024 && unitIdx < len(units)-1 {
+		coeff = coeff / 1024
+		unitIdx += 1
+	}
+	if unitIdx == 0 {
+		return fmt.Sprintf("%d%s", bytes, units[unitIdx])
+	}
+	if coeff >= 10 {
+		return fmt.Sprintf("%.0f%s", coeff, units[unitIdx])
+
+	}
+	return fmt.Sprintf("%.1f%s", coeff, units[unitIdx])
+}

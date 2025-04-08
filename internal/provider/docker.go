@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,11 +66,28 @@ func (p *dockerProvider) Sync(config config.SyncConfig) error {
 	slog.Info("syncing docker images", "src", srcName, "dst", dstName)
 
 	// TODO: Cache comparisons, and then don't need to re-export each time for multiple dsts
+	// TODO: Sub-logger with src/dst/image
 	for _, e := range entriesToTransfer {
 		// docker save "$I" -o "./$FILENAME"
 		fileName := strings.Replace(e.Repository, "/", "_", -1) + ".tar.gz"
 		filePath := filepath.Join(tempPath, fileName)
-		config.SrcExecutor.ExecuteCommand("docker", "save", e.Repository, "-o", filePath)
+
+		if _, stderr, err := config.SrcExecutor.ExecuteCommand("docker", "save", e.Repository, "-o", filePath); err != nil {
+			slog.Error("failed to export image", "src", srcName, "dst", dstName, "image", e.Repository, "stderr", stderr, "err", err)
+		}
+
+		fileSize := ""
+		stdout, _, err := config.SrcExecutor.ExecuteCommand("stat", "-c", "%s", filePath)
+		if err != nil {
+			slog.Warn("failed to get file size; continuing without it", "src", srcName, "dst", dstName, "image", e.Repository, "err", err)
+		} else {
+			fileSizeBytes, err := strconv.ParseInt(strings.TrimSpace(stdout), 10, 64)
+			if err != nil {
+				slog.Warn("failed to parse file size; continuing without it", "src", srcName, "dst", dstName, "image", e.Repository, "err", err)
+			} else {
+				fileSize = util.HumanReadableSize(fileSizeBytes)
+			}
+		}
 
 		if _, _, err := config.DstExecutor.ExecuteCommand("mkdir", "-p", tempPath); err != nil {
 			slog.Error("could not create dst temp directory", "dst", dstName, "dir", tempPath, "err", err)
@@ -77,13 +95,19 @@ func (p *dockerProvider) Sync(config config.SyncConfig) error {
 		}
 		defer config.DstExecutor.ExecuteCommand("rm", "-rf", tempPath)
 
+		slog.Info("transferring image",
+			"src", srcName,
+			"dst", dstName,
+			"image", e.Repository,
+			"file-size", fileSize)
+
 		if err := config.Transport.TransferFile(config.SrcExecutor, filePath, config.DstExecutor, filePath); err != nil {
 			slog.Error("failed to transfer file", "dst", dstName, "file", filePath, "err", err)
 			return err
 		}
 
-		if _, _, err := config.DstExecutor.ExecuteShell(fmt.Sprintf("cat %s | sudo docker load", filePath)); err != nil {
-			slog.Error("failed to load image on remote", "dst", dstName, "file", filePath, "image", e.Repository, "err", err)
+		if _, stderr, err := config.DstExecutor.ExecuteShell(fmt.Sprintf("cat %s | sudo docker load", filePath)); err != nil {
+			slog.Error("failed to load image on remote", "dst", dstName, "file", filePath, "image", e.Repository, "stderr", stderr, "err", err)
 			return err
 		}
 	}
