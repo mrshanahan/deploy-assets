@@ -1,12 +1,15 @@
 package executor
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/mrshanahan/deploy-assets/internal/config"
 	"github.com/mrshanahan/deploy-assets/internal/util"
@@ -51,15 +54,6 @@ func (c *sshClient) Close() {
 
 // TODO: Can we make this more efficient? I.e. re-using sessions
 func (c *sshClient) runCommandInSession(cmd string) (string, string, error) {
-	// Each ClientConn can support multiple interactive sessions,
-	// represented by a Session.
-	session, err := c.client.NewSession()
-	if err != nil {
-		slog.Error("failed to create ssh session", "name", c.name, "run-elevated", c.runElevated)
-		return "", "", err
-	}
-	defer session.Close()
-
 	// TODO: Create single folder for all these files & then delete them
 
 	scriptPathBase64 := util.GetTempFilePath("deploy-assets-ssh-b64")
@@ -88,7 +82,7 @@ func (c *sshClient) runCommandInSession(cmd string) (string, string, error) {
 		runCmd = fmt.Sprintf("bash %s", scriptPath)
 	}
 
-	stdout, stderr, err = c.executeCommand(runCmd)
+	stdout, stderr, err = c.executeCommandWithLogging(runCmd)
 	return stdout, stderr, err
 }
 
@@ -108,6 +102,70 @@ func (c *sshClient) executeCommand(cmd string) (string, string, error) {
 	err = session.Run(cmd)
 	stdout := stdoutBuffer.String()
 	stderr := stderrBuffer.String()
+	slog.Debug("executed ssh command", "cmd", cmd, "stdout", stdout, "stderr", stderr, "err", err)
+	return stdout, stderr, err
+}
+
+func (c *sshClient) executeCommandWithLogging(cmd string) (string, string, error) {
+	// Once a Session is created, you can execute a single command on
+	// the remote side using the Run method.
+	session, err := c.client.NewSession()
+	if err != nil {
+		slog.Error("failed to create ssh session", "name", c.name, "run-elevated", c.runElevated)
+		return "", "", err
+	}
+	defer session.Close()
+
+	stdoutReader, stdoutWriter := io.Pipe()
+	defer stdoutReader.Close()
+	stdoutBuilder := &strings.Builder{}
+	stdoutMultiWriter := io.MultiWriter(stdoutWriter, stdoutBuilder)
+	session.Stdout = stdoutMultiWriter
+
+	stderrReader, stderrWriter := io.Pipe()
+	defer stderrReader.Close()
+	stderrBuilder := &strings.Builder{}
+	stderrMultiWriter := io.MultiWriter(stderrWriter, stderrBuilder)
+	session.Stderr = stderrMultiWriter
+
+	slog.Debug("executing ssh command", "cmd", cmd)
+	if err := session.Start(cmd); err != nil {
+		return "", "", fmt.Errorf("failed to start ssh command: %v", err)
+	}
+
+	bufStdoutReader, bufStderrReader := bufio.NewScanner(stdoutReader), bufio.NewScanner(stderrReader)
+	bufStdoutReader.Split(util.ScanUntil('\n', '\r'))
+	bufStderrReader.Split(util.ScanUntil('\n', '\r'))
+
+	stdoutDone, stderrDone := make(chan bool), make(chan bool)
+
+	// TODO: Scanner.Err()
+	go func() {
+		for bufStdoutReader.Scan() {
+			line := bufStdoutReader.Text()
+			slog.Debug("ssh stdout", "location", c.name, "line", line)
+			time.Sleep(10 * time.Millisecond)
+		}
+		stdoutDone <- true
+	}()
+
+	go func() {
+		for bufStderrReader.Scan() {
+			line := bufStderrReader.Text()
+			slog.Debug("ssh stderr", "location", c.name, "line", line)
+			time.Sleep(10 * time.Millisecond)
+		}
+		stderrDone <- true
+	}()
+
+	err = session.Wait()
+	slog.Debug("ssh command completed", "cmd", cmd, "err", err)
+	stdoutWriter.Close()
+	stderrWriter.Close()
+	<-stderrDone
+	<-stdoutDone
+	stdout := stdoutBuilder.String()
+	stderr := stderrBuilder.String()
 	slog.Debug("executed ssh command", "cmd", cmd, "stdout", stdout, "stderr", stderr, "err", err)
 	return stdout, stderr, err
 }

@@ -6,7 +6,7 @@ build:
 	go build -o "$(CURDIR)/cmd/deploy-assets" "$(CURDIR)/cmd/deploy-assets.go"
 
 test:
-	go test "$(CURDIR)/cmd" "$(CURDIR)/internal/*"
+	go test "$(CURDIR)/cmd" "$(CURDIR)/internal"/*
 
 run:
 	go run "$(CURDIR)/cmd/deploy-assets.go"

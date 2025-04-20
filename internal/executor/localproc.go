@@ -1,11 +1,16 @@
 package executor
 
 import (
+	"bufio"
+	"fmt"
+	"io"
 	"log/slog"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/mrshanahan/deploy-assets/internal/config"
+	"github.com/mrshanahan/deploy-assets/internal/util"
 )
 
 type localExecutor struct {
@@ -20,14 +25,58 @@ func (e *localExecutor) Name() string { return e.name }
 
 func (e *localExecutor) ExecuteCommand(name string, args ...string) (string, string, error) {
 	command := exec.Command(name, args...)
-	var stdoutReceiver strings.Builder
-	var stderrReceiver strings.Builder
-	command.Stdout = &stdoutReceiver
-	command.Stderr = &stderrReceiver
 
-	err := command.Run()
-	stdout := stdoutReceiver.String()
-	stderr := stderrReceiver.String()
+	stdoutReader, stdoutWriter := io.Pipe()
+	defer stdoutReader.Close()
+	stdoutBuilder := &strings.Builder{}
+	stdoutMultiWriter := io.MultiWriter(stdoutWriter, stdoutBuilder)
+	command.Stdout = stdoutMultiWriter
+
+	stderrReader, stderrWriter := io.Pipe()
+	defer stderrReader.Close()
+	stderrBuilder := &strings.Builder{}
+	stderrMultiWriter := io.MultiWriter(stderrWriter, stderrBuilder)
+	command.Stderr = stderrMultiWriter
+
+	if err := command.Start(); err != nil {
+		return "", "", fmt.Errorf("failed to start command: %v", err)
+	}
+
+	bufStdoutReader, bufStderrReader := bufio.NewScanner(stdoutReader), bufio.NewScanner(stderrReader)
+	bufStdoutReader.Split(util.ScanUntil('\n', '\r'))
+	bufStderrReader.Split(util.ScanUntil('\n', '\r'))
+
+	stdoutDone, stderrDone := make(chan bool), make(chan bool)
+
+	// TODO: Scanner.Err()
+
+	go func() {
+		for bufStdoutReader.Scan() {
+			line := bufStdoutReader.Text()
+			slog.Debug("local stdout", "location", e.name, "command-name", name, "line", line)
+			time.Sleep(10 * time.Millisecond)
+		}
+		// slog.Debug("local stdout eof", "location", e.name, "command-name", name)
+		stdoutDone <- true
+	}()
+
+	go func() {
+		for bufStderrReader.Scan() {
+			line := bufStderrReader.Text()
+			slog.Debug("local stderr", "location", e.name, "command-name", name, "line", line)
+			time.Sleep(10 * time.Millisecond)
+		}
+		// slog.Debug("local stderr eof", "location", e.name, "command-name", name)
+		stderrDone <- true
+	}()
+
+	err := command.Wait()
+	stdoutWriter.Close()
+	stderrWriter.Close()
+	<-stdoutDone
+	<-stderrDone
+	stdout := stdoutBuilder.String()
+	stderr := stderrBuilder.String()
 	slog.Debug("executed local command", "name", name, "args", args, "stdout", stdout, "stderr", stderr, "err", err)
 	return stdout, stderr, err
 }

@@ -34,7 +34,7 @@ func ValidateAWSCLIInstallation(e config.Executor) error {
 }
 
 func ValidateAWSCLILogin(e config.Executor) error {
-	_, _, err := e.ExecuteShell("aws sts caller-identity ")
+	_, _, err := e.ExecuteShell("aws sts get-caller-identity")
 	return err
 }
 
