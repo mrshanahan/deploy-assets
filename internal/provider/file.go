@@ -12,14 +12,15 @@ import (
 	"github.com/mrshanahan/deploy-assets/internal/util"
 )
 
-func NewDirProvider(name, srcPath, dstPath string) config.Provider {
-	return &dirProvider{name, srcPath, dstPath, make(map[string]*fileEntry), make(map[string]map[string]*fileEntry)}
+func NewFileProvider(name, srcPath, dstPath string, recursive bool) config.Provider {
+	return &fileProvider{name, srcPath, dstPath, recursive, make(map[string]*fileEntry), make(map[string]map[string]*fileEntry)}
 }
 
-type dirProvider struct {
+type fileProvider struct {
 	name       string
 	srcPath    string
 	dstPath    string
+	recursive  bool
 	srcEntries map[string]*fileEntry
 	dstEntries map[string]map[string]*fileEntry
 }
@@ -30,18 +31,22 @@ type fileEntry struct {
 	modifiedAt time.Time
 }
 
-func loadFileEntries(dirPath string, executor config.Executor) (map[string]*fileEntry, error) {
+func loadFileEntries(path string, executor config.Executor, recursive bool) (map[string]*fileEntry, error) {
 	server := executor.Name()
 	entries := make(map[string]*fileEntry)
 
-	realPath, stderr, err := executor.ExecuteShell(fmt.Sprintf("realpath %s", dirPath))
+	realPath, stderr, err := executor.ExecuteShell(fmt.Sprintf("realpath %s", path))
 	if err != nil {
-		slog.Error("failed to get real file path", "server", server, "dir-path", dirPath, "stdout", realPath, "stderr", stderr, "err", err)
+		slog.Error("failed to get real file path", "server", server, "path", path, "stdout", realPath, "stderr", stderr, "err", err)
 		return nil, err
 	}
 	realPath = strings.TrimSpace(realPath)
 
-	cmd := fmt.Sprintf("find %s -type f -exec ls -l --time-style=+%%s '{}' \\; | sed -E 's/ +/ /g' | cut -d ' ' -f6-", realPath)
+	maxDepthArg := ""
+	if !recursive {
+		maxDepthArg = "-maxdepth 1 "
+	}
+	cmd := fmt.Sprintf("find %s -type f %s-exec ls -l --time-style=+%%s '{}' \\; | sed -E 's/ +/ /g' | cut -d ' ' -f6-", realPath, maxDepthArg)
 	slog.Debug("executing file discovery", "server", server, "cmd", cmd)
 	stdout, stderr, err := executor.ExecuteShell(cmd)
 	if err != nil {
@@ -72,16 +77,16 @@ func loadFileEntries(dirPath string, executor config.Executor) (map[string]*file
 	return entries, nil
 }
 
-func (p *dirProvider) Name() string { return p.name }
+func (p *fileProvider) Name() string { return p.name }
 
 // TODO: Combine tmp file usage, both in code & on system
-func (p *dirProvider) Sync(config config.SyncConfig) error {
-	srcEntries, err := loadFileEntries(p.srcPath, config.SrcExecutor)
+func (p *fileProvider) Sync(config config.SyncConfig) error {
+	srcEntries, err := loadFileEntries(p.srcPath, config.SrcExecutor, p.recursive)
 	if err != nil {
 		return err
 	}
 
-	dstEntries, err := loadFileEntries(p.dstPath, config.DstExecutor)
+	dstEntries, err := loadFileEntries(p.dstPath, config.DstExecutor, p.recursive)
 	if err != nil {
 		return err
 	}
@@ -111,7 +116,7 @@ func (p *dirProvider) Sync(config config.SyncConfig) error {
 		return nil
 	}
 
-	tempFolderPath := util.GetTempFilePath("deploy-assets-dir")
+	tempFolderPath := util.GetTempFilePath("deploy-assets-file")
 	tempPackageFolderName := "package"
 	tempPackageFolderPath := filepath.Join(tempFolderPath, tempPackageFolderName)
 	if _, _, err := config.SrcExecutor.ExecuteCommand("mkdir", "-p", tempPackageFolderPath); err != nil {

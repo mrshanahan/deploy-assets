@@ -187,14 +187,14 @@ func buildItemNode(itemJson map[string]any, itemSpecs map[string]ManifestItemSpe
 		if err != nil {
 			return nil, fmt.Errorf("%s: %v", jsonPath, err)
 		}
+		if !prs {
+			attrValue = attr.DefaultValue
+		}
 
-		var matchingType string
-		if prs {
-			validValueTypes := strings.Split(attr.ValueType, "|")
-			matchingType, err = checkValueType(attrValue, validValueTypes)
-			if err != nil {
-				return nil, fmt.Errorf("%s.%s: %v", jsonPath, attr.Name, err)
-			}
+		validValueTypes := strings.Split(attr.ValueType, "|")
+		matchingType, err := checkValueType(attrValue, validValueTypes)
+		if err != nil {
+			return nil, fmt.Errorf("%s.%s: %v", jsonPath, attr.Name, err)
 		}
 
 		attrNode := &AttributeNode{
@@ -215,10 +215,6 @@ func getRequiredField[T any](obj map[string]any, key string, value *T) error {
 		return err
 	}
 	return nil
-}
-
-func getOptionalField[T any](obj map[string]any, key string, value *T) (bool, error) {
-	return getField[T](obj, key, false, value)
 }
 
 func getField[T any](obj map[string]any, key string, isRequired bool, value *T) (bool, error) {

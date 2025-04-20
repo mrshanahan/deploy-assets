@@ -132,11 +132,12 @@ func buildProviders(root *ManifestNode, manifest *Manifest) []error {
 		}
 
 		switch a.Type {
-		case "dir":
+		case "file":
 			srcPath := a.Attributes["src_path"].GetValue().(string)
 			dstPath := a.Attributes["dst_path"].GetValue().(string)
+			recursive := a.Attributes["recursive"].GetValue().(bool)
 			providerConfig := &config.ProviderConfig{
-				Provider: provider.NewDirProvider(name, srcPath, dstPath),
+				Provider: provider.NewFileProvider(name, srcPath, dstPath, recursive),
 				Src:      src,
 				Dst:      dst,
 			}

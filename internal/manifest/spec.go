@@ -21,7 +21,7 @@ func NewManifestSpec() *ManifestSpec {
 			&AssetsKindSpec{
 				GenericKindSpec: GenericKindSpec{
 					itemSpecs: []ManifestItemSpec{
-						&DirAssetItemSpec{},
+						&FileAssetItemSpec{},
 						&DockerImageAssetItemSpec{},
 					},
 				},
@@ -77,9 +77,18 @@ func (s *AssetsKindSpec) Name() string { return "assets" }
 func (s *AssetsKindSpec) IsCollection() bool { return true }
 
 type AttributeSpec struct {
-	Name       string
-	ValueType  string
-	IsRequired bool
+	Name         string
+	ValueType    string
+	IsRequired   bool
+	DefaultValue any
+}
+
+func RequiredAttribute(name, valueType string) AttributeSpec {
+	return AttributeSpec{name, valueType, true, nil}
+}
+
+func OptionalAttribute(name, valueType string, defaultValue any) AttributeSpec {
+	return AttributeSpec{name, valueType, false, defaultValue}
 }
 
 type ManifestItemSpec interface {
@@ -89,7 +98,7 @@ type ManifestItemSpec interface {
 
 func GetDefaultItemAttributes() []AttributeSpec {
 	return []AttributeSpec{
-		AttributeSpec{"name", "string", false},
+		OptionalAttribute("name", "string", ""),
 	}
 }
 
@@ -99,7 +108,7 @@ type LocalLocationItemSpec struct {
 
 func GetDefaultLocationItemAttributes() []AttributeSpec {
 	return []AttributeSpec{
-		AttributeSpec{"name", "string", true},
+		RequiredAttribute("name", "string"),
 	}
 }
 
@@ -120,10 +129,10 @@ func (s *SSHLocationItemSpec) Attributes() []AttributeSpec {
 	return append(
 		GetDefaultLocationItemAttributes(),
 		[]AttributeSpec{
-			AttributeSpec{"server", "string", true},
-			AttributeSpec{"username", "string", true},
-			AttributeSpec{"key_file", "string", true},
-			AttributeSpec{"run_elevated", "bool", false}, // TODO: specify default value?
+			RequiredAttribute("server", "string"),
+			RequiredAttribute("username", "string"),
+			RequiredAttribute("key_file", "string"),
+			OptionalAttribute("run_elevated", "bool", false), // TODO: specify default value?
 		}...,
 	)
 }
@@ -136,31 +145,32 @@ func (s *S3TransportItemSpec) Attributes() []AttributeSpec {
 	return append(
 		GetDefaultItemAttributes(),
 		[]AttributeSpec{
-			AttributeSpec{"bucket_url", "string", true},
+			RequiredAttribute("bucket_url", "string"),
 		}...,
 	)
 }
 
-type DirAssetItemSpec struct{}
+type FileAssetItemSpec struct{}
 
 func GetDefaultAssetItemAttributes() []AttributeSpec {
 	return append(
 		GetDefaultItemAttributes(),
 		[]AttributeSpec{
-			AttributeSpec{"src", "string", true},
-			AttributeSpec{"dst", "string", true},
+			RequiredAttribute("src", "string"),
+			RequiredAttribute("dst", "string"),
 		}...,
 	)
 }
 
-func (s *DirAssetItemSpec) Type() string { return "dir" }
+func (s *FileAssetItemSpec) Type() string { return "file" }
 
-func (s *DirAssetItemSpec) Attributes() []AttributeSpec {
+func (s *FileAssetItemSpec) Attributes() []AttributeSpec {
 	return append(
 		GetDefaultAssetItemAttributes(),
 		[]AttributeSpec{
-			AttributeSpec{"src_path", "string", true},
-			AttributeSpec{"dst_path", "string", true},
+			RequiredAttribute("src_path", "string"),
+			RequiredAttribute("dst_path", "string"),
+			OptionalAttribute("recursive", "bool", false),
 		}...,
 	)
 }
@@ -173,7 +183,7 @@ func (s *DockerImageAssetItemSpec) Attributes() []AttributeSpec {
 	return append(
 		GetDefaultAssetItemAttributes(),
 		[]AttributeSpec{
-			AttributeSpec{"repository", "string|[]string", true},
+			RequiredAttribute("repository", "string|[]string"),
 		}...,
 	)
 }
