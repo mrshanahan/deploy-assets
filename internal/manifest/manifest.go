@@ -136,10 +136,12 @@ func buildProviders(root *ManifestNode, manifest *Manifest) []error {
 			srcPath := a.Attributes["src_path"].GetValue().(string)
 			dstPath := a.Attributes["dst_path"].GetValue().(string)
 			recursive := a.Attributes["recursive"].GetValue().(bool)
+			postCommand := a.Attributes["post_command"].GetValue().(string)
 			providerConfig := &config.ProviderConfig{
-				Provider: provider.NewFileProvider(name, srcPath, dstPath, recursive),
-				Src:      src,
-				Dst:      dst,
+				Provider:    provider.NewFileProvider(name, srcPath, dstPath, recursive),
+				Src:         src,
+				Dst:         dst,
+				PostCommand: postCommand,
 			}
 			manifest.Providers = append(manifest.Providers, providerConfig)
 		case "docker_image":
@@ -150,10 +152,12 @@ func buildProviders(root *ManifestNode, manifest *Manifest) []error {
 			} else {
 				repositories = repositoryAttr.GetValue().([]string)
 			}
+			postCommand := a.Attributes["post_command"].GetValue().(string)
 			providerConfig := &config.ProviderConfig{
-				Provider: provider.NewDockerProvider(name, repositories...),
-				Src:      src,
-				Dst:      dst,
+				Provider:    provider.NewDockerProvider(name, repositories...),
+				Src:         src,
+				Dst:         dst,
+				PostCommand: postCommand,
 			}
 			manifest.Providers = append(manifest.Providers, providerConfig)
 		default:

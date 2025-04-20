@@ -94,6 +94,28 @@ func main() {
 					slog.Warn("continuing with remaining destinations despite error")
 				}
 			}
+
+			if !*dryRunParam && providerConfig.PostCommand != "" {
+				slog.Debug("executing post-command",
+					"asset", providerConfig.Provider.Name(),
+					"src", srcExecutor.Name(),
+					"dst", dstExecutor.Name())
+				stdout, stderr, err := dstExecutor.ExecuteShell(providerConfig.PostCommand)
+				if err != nil {
+					slog.Error("failed to execute post-command",
+						"asset", providerConfig.Provider.Name(),
+						"src", srcExecutor.Name(),
+						"dst", dstExecutor.Name(),
+						"err", err,
+						"stdout", stdout,
+						"stderr", stderr)
+					if !*continueOnErrorParam {
+						os.Exit(1)
+					} else {
+						slog.Warn("continuing with remaining destinations despite error")
+					}
+				}
+			}
 		}
 
 	}

@@ -20,9 +20,10 @@ type Provider interface {
 }
 
 type ProviderConfig struct {
-	Provider Provider
-	Src      string
-	Dst      string
+	Provider    Provider
+	Src         string
+	Dst         string
+	PostCommand string
 }
 
 type Transport interface {

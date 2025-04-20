@@ -41,7 +41,7 @@ func (p *dockerProvider) Sync(config config.SyncConfig) error {
 
 	entriesToTransfer := getEntriesToTransfer(srcEntries, dstEntries)
 	if len(entriesToTransfer) == 0 {
-		slog.Info("no images to transfer", "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name())
+		slog.Info("no images to transfer", "name", p.Name(), "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name())
 		return nil
 	}
 

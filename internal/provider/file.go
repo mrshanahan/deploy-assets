@@ -93,12 +93,12 @@ func (p *fileProvider) Sync(config config.SyncConfig) error {
 
 	entriesToTransfer := getFilesToTransfer(srcEntries, dstEntries)
 	if len(entriesToTransfer) == 0 {
-		slog.Info("no files to transfer", "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name())
+		slog.Info("no files to transfer", "name", p.Name(), "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name())
 		return nil
 	}
 
 	if config.DryRun {
-		slog.Info("DRY RUN: copying files", "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name(), "num-files", len(entriesToTransfer))
+		slog.Info("DRY RUN: copying files", "name", p.Name(), "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name(), "num-files", len(entriesToTransfer))
 		for _, e := range entriesToTransfer {
 			var dstModifiedAtStr string
 			dstEntry, prs := dstEntries[e.truncPath]
