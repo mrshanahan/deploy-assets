@@ -25,35 +25,56 @@ type fileProvider struct {
 	dstEntries map[string]map[string]*fileEntry
 }
 
-type fileEntry struct {
-	path       string
-	truncPath  string
-	modifiedAt time.Time
+type targetFileEntry struct {
+	path      string
+	fileEntry *fileEntry
 }
 
-func loadFileEntries(path string, executor config.Executor, recursive bool) (map[string]*fileEntry, error) {
+type fileEntry struct {
+	path         string
+	relativePath string
+	modifiedAt   time.Time
+}
+
+type mappedFileEntry struct {
+	Src *fileEntry
+	Dst *targetFileEntry
+}
+
+type fileInfo struct {
+	FullPath    string
+	IsDirectory bool
+	Exists      bool
+	DirExists   bool
+}
+
+func loadFileEntries(finfo *fileInfo, executor config.Executor, recursive bool) (map[string]*fileEntry, error) {
 	server := executor.Name()
 	entries := make(map[string]*fileEntry)
 
-	realPath, stderr, err := executor.ExecuteShell(fmt.Sprintf("realpath %s", path))
-	if err != nil {
-		slog.Error("failed to get real file path", "server", server, "path", path, "stdout", realPath, "stderr", stderr, "err", err)
-		return nil, err
+	var dirPath string
+	if finfo.IsDirectory {
+		dirPath = finfo.FullPath
+	} else {
+		// TODO: This is a little sus. Technically we're expecting all executors to be able to run POSIX-ish commands,
+		// but this is explicitly using the local filepath lib to parse out a remote filepath, which seems bad. Just
+		// seems a bit silly to
+		dirPath = filepath.Dir(finfo.FullPath)
 	}
-	realPath = strings.TrimSpace(realPath)
+	dirPath = strings.TrimRight(dirPath, "/") + "/"
 
 	maxDepthArg := ""
 	if !recursive {
 		maxDepthArg = "-maxdepth 1 "
 	}
-	cmd := fmt.Sprintf("find %s -type f %s-exec ls -l --time-style=+%%s '{}' \\; | sed -E 's/ +/ /g' | cut -d ' ' -f6-", realPath, maxDepthArg)
+	cmd := fmt.Sprintf("find \"%s\" -type f %s-exec ls -l --time-style=+%%s '{}' \\; | sed -E 's/ +/ /g' | cut -d ' ' -f6-", finfo.FullPath, maxDepthArg)
 	slog.Debug("executing file discovery", "server", server, "cmd", cmd)
 	stdout, stderr, err := executor.ExecuteShell(cmd)
 	if err != nil {
 		slog.Error("failed to perform file discovery", "server", server, "stdout", stdout, "stderr", stderr, "err", err)
 		return nil, err
 	}
-	files := strings.Split(stdout, "\n")
+	files := strings.Split(strings.TrimSpace(stdout), "\n")
 	slog.Debug("found files", "server", server, "num-files", len(files))
 	for _, f := range files {
 		if f == "" {
@@ -66,32 +87,117 @@ func loadFileEntries(path string, executor config.Executor, recursive bool) (map
 			return nil, err
 		}
 		filePath := strings.Join(comps[1:], " ")
-		truncPath := strings.Replace(filePath, realPath, "", -1)
-		entries[truncPath] = &fileEntry{filePath, truncPath, time.Unix(timestamp, 0)}
+		relativePath := strings.Replace(filePath, dirPath, "", -1)
+		entries[relativePath] = &fileEntry{filePath, relativePath, time.Unix(timestamp, 0)}
 		slog.Debug("file entry",
 			"server", server,
-			"trunc-path", entries[truncPath].truncPath,
-			"full-path", entries[truncPath].path,
-			"modified-at", entries[truncPath].modifiedAt.UTC().Format(time.RFC3339))
+			"relative-path", entries[relativePath].relativePath,
+			"full-path", entries[relativePath].path,
+			"modified-at", entries[relativePath].modifiedAt.UTC().Format(time.RFC3339))
 	}
 	return entries, nil
+}
+
+func getFileInfo(path string, executor config.Executor) (*fileInfo, error) {
+	server := executor.Name()
+
+	// TODO: Paths ending in a return/newline will be incorrect after trim. I _hope_ we don't have to worry about this.
+	canonPath, stderr, err := executor.ExecuteShell(fmt.Sprintf("realpath -m \"%s\"", path))
+	if err != nil {
+		slog.Error("failed to canonicalize path", "stderr", stderr, "err", err)
+		return nil, err
+	}
+	canonPath = strings.TrimRight(canonPath, "\r\n")
+
+	dirName := filepath.Dir(canonPath)
+
+	stdout, stderr, err := executor.ExecuteShell(fmt.Sprintf("test -e \"%s\"", dirName))
+	if err != nil && stderr == "" {
+		return &fileInfo{
+			FullPath:    canonPath,
+			IsDirectory: false,
+			Exists:      false,
+			DirExists:   false,
+		}, nil
+	} else if err != nil {
+		slog.Error("failed to check for file path parent existence", "server", server, "path", dirName, "stdout", stdout, "stderr", stderr, "err", err)
+		return nil, err
+	}
+
+	stdout, stderr, err = executor.ExecuteShell(fmt.Sprintf("test -e \"%s\"", canonPath))
+	if err != nil && stderr == "" {
+		return &fileInfo{
+			FullPath:    canonPath,
+			IsDirectory: false,
+			Exists:      false,
+			DirExists:   true,
+		}, nil
+	} else if err != nil {
+		slog.Error("failed to check for file path existence", "server", server, "path", canonPath, "stdout", stdout, "stderr", stderr, "err", err)
+		return nil, err
+	}
+
+	fileType, stderr, err := executor.ExecuteShell(fmt.Sprintf("stat \"%s\" -c %%F", canonPath))
+	if err != nil {
+		slog.Error("failed to get file type", "server", server, "path", canonPath, "stdout", fileType, "stderr", stderr, "err", err)
+		return nil, err
+	}
+	fileType = strings.TrimSpace(fileType)
+
+	return &fileInfo{
+		FullPath:    canonPath,
+		IsDirectory: fileType == "directory",
+		Exists:      true,
+		DirExists:   true,
+	}, nil
 }
 
 func (p *fileProvider) Name() string { return p.name }
 
 // TODO: Combine tmp file usage, both in code & on system
 func (p *fileProvider) Sync(config config.SyncConfig) error {
-	srcEntries, err := loadFileEntries(p.srcPath, config.SrcExecutor, p.recursive)
+	srcFileInfo, err := getFileInfo(p.srcPath, config.SrcExecutor)
 	if err != nil {
 		return err
 	}
 
-	dstEntries, err := loadFileEntries(p.dstPath, config.DstExecutor, p.recursive)
+	if !srcFileInfo.Exists {
+		return fmt.Errorf("src file is missing")
+	}
+
+	dstFileInfo, err := getFileInfo(p.dstPath, config.DstExecutor)
 	if err != nil {
 		return err
 	}
 
-	entriesToTransfer := getFilesToTransfer(srcEntries, dstEntries)
+	var dstEntries map[string]*fileEntry
+	if dstFileInfo.Exists {
+		if dstFileInfo.IsDirectory != srcFileInfo.IsDirectory {
+			return fmt.Errorf("mismatch in file type")
+		}
+
+		// NB: This should work the same way whether or not the source
+		// is a file or a directory.
+		dstEntries, err = loadFileEntries(dstFileInfo, config.DstExecutor, p.recursive)
+		if err != nil {
+			return err
+		}
+
+	} else {
+		if !dstFileInfo.DirExists {
+			return fmt.Errorf("target base directory does not exist")
+		}
+
+		dstEntries = make(map[string]*fileEntry)
+	}
+
+	srcEntries, err := loadFileEntries(srcFileInfo, config.SrcExecutor, p.recursive)
+	if err != nil {
+		return err
+	}
+
+	entriesToTransfer := compareFilesForTransfer(srcEntries, dstEntries, dstFileInfo)
+
 	if len(entriesToTransfer) == 0 {
 		slog.Info("no files to transfer", "name", p.Name(), "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name())
 		return nil
@@ -100,17 +206,16 @@ func (p *fileProvider) Sync(config config.SyncConfig) error {
 	if config.DryRun {
 		slog.Info("DRY RUN: copying files", "name", p.Name(), "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name(), "num-files", len(entriesToTransfer))
 		for _, e := range entriesToTransfer {
-			var dstModifiedAtStr string
-			dstEntry, prs := dstEntries[e.truncPath]
-			if !prs {
-				dstModifiedAtStr = ""
+			var dstModifiedAt, dstPath any
+			srcPath, srcModifiedAt := e.Src.path, e.Src.modifiedAt.Format(time.RFC3339)
+			if e.Dst.fileEntry != nil {
+				dstPath, dstModifiedAt = e.Dst.path, e.Dst.fileEntry.modifiedAt.Format(time.RFC3339)
 			} else {
-				dstModifiedAtStr = dstEntry.modifiedAt.Format(time.RFC3339)
+				dstPath, dstModifiedAt = nil, nil
 			}
 			slog.Info("DRY RUN: copy",
-				"trunc-path", e.truncPath,
-				"src-modified-at", e.modifiedAt.Format(time.RFC3339),
-				"dst-modified-at", dstModifiedAtStr)
+				"src-path", srcPath, "src-modified-at", srcModifiedAt,
+				"dst-path", dstPath, "dst-modified-at", dstModifiedAt)
 		}
 
 		return nil
@@ -125,18 +230,21 @@ func (p *fileProvider) Sync(config config.SyncConfig) error {
 	}
 	defer config.SrcExecutor.ExecuteCommand("rm", "-rf", tempFolderPath)
 
-	srcName := config.SrcExecutor.Name()
-	dstName := config.DstExecutor.Name()
+	srcServerName := config.SrcExecutor.Name()
+	dstServerName := config.DstExecutor.Name()
 
-	slog.Info("syncing files", "src", srcName, "dst", dstName, "num-files", len(entriesToTransfer))
-	for _, e := range entriesToTransfer {
-		dir := filepath.Dir(e.truncPath)
+	slog.Info("syncing files", "name", p.Name(), "src", srcServerName, "dst", dstServerName, "num-files", len(entriesToTransfer))
+	for _, mapped := range entriesToTransfer {
+		src := mapped.Src
+		dir := filepath.Dir(src.relativePath)
 		targetDir := filepath.Join(tempPackageFolderPath, dir)
 		_, _, err := config.SrcExecutor.ExecuteCommand("mkdir", "-p", targetDir)
 		if err != nil {
 			return err
 		}
-		_, _, err = config.SrcExecutor.ExecuteCommand("cp", "-a", e.path, targetDir)
+
+		slog.Info("copying src file to temp", "file", src.path)
+		_, _, err = config.SrcExecutor.ExecuteCommand("cp", "-a", src.path, targetDir)
 		if err != nil {
 			return err
 		}
@@ -154,7 +262,7 @@ func (p *fileProvider) Sync(config config.SyncConfig) error {
 	compressedPackagePath := tempPackagePath + ".gz"
 
 	if _, _, err := config.DstExecutor.ExecuteCommand("mkdir", "-p", tempFolderPath); err != nil {
-		slog.Error("could not create dst temp directory", "dst", dstName, "dir", tempFolderPath, "err", err)
+		slog.Error("could not create dst temp directory", "dst", dstServerName, "dir", tempFolderPath, "err", err)
 		return err
 	}
 	defer config.DstExecutor.ExecuteCommand("rm", "-rf", tempFolderPath)
@@ -171,19 +279,54 @@ func (p *fileProvider) Sync(config config.SyncConfig) error {
 		return err
 	}
 
-	copyGlob := filepath.Join(tempPackageFolderPath, "*")
-	if _, _, err := config.DstExecutor.ExecuteShell(fmt.Sprintf("cp -ar %s %s", copyGlob, p.dstPath)); err != nil {
+	// If dir & dst doesn't exist: 	package 	-> dst
+	// If dir & dst exists: 		package/* 	-> dst	(otherwise if dst exists then we would get dst/package)
+	// If file:						package/src	-> dst
+
+	var srcCopyPath string
+	if srcFileInfo.IsDirectory && dstFileInfo.Exists {
+		srcCopyPath = filepath.Join(tempPackageFolderPath, "*")
+	} else if srcFileInfo.IsDirectory {
+		srcCopyPath = tempPackageFolderPath
+	} else {
+		srcName := filepath.Base(p.srcPath)
+		srcCopyPath = filepath.Join(tempPackageFolderPath, srcName)
+	}
+
+	if _, _, err := config.DstExecutor.ExecuteShell(fmt.Sprintf("cp -ar %s %s", srcCopyPath, p.dstPath)); err != nil {
 		return err
 	}
+
 	return nil
 }
 
-func getFilesToTransfer(src, dst map[string]*fileEntry) []*fileEntry {
-	entries := []*fileEntry{}
+func compareFilesForTransfer(src, dst map[string]*fileEntry, dstFileInfo *fileInfo) []*mappedFileEntry {
+	entries := []*mappedFileEntry{}
 	for k, srce := range src {
 		dste, existse := dst[k]
-		if !existse || srce.modifiedAt != dste.modifiedAt {
-			entries = append(entries, srce)
+		if !existse {
+			var dstTargetPath string
+			if dstFileInfo.IsDirectory {
+				dstTargetPath = filepath.Join(dstFileInfo.FullPath, srce.relativePath)
+			} else {
+				dstTargetPath = dstFileInfo.FullPath
+			}
+			entries = append(entries, &mappedFileEntry{
+				Src: srce,
+				Dst: &targetFileEntry{
+					path:      dstTargetPath,
+					fileEntry: nil,
+				},
+			})
+			// } else if srce.modifiedAt.After(dste.modifiedAt) {
+		} else if srce.modifiedAt != dste.modifiedAt {
+			entries = append(entries, &mappedFileEntry{
+				Src: srce,
+				Dst: &targetFileEntry{
+					path:      dste.path,
+					fileEntry: dste,
+				},
+			})
 		}
 	}
 	return entries

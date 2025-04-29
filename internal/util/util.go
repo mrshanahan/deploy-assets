@@ -82,6 +82,15 @@ func All[T any](xs []T, p func(T) bool) bool {
 	return true
 }
 
+func Any[T any](xs []T, p func(T) bool) bool {
+	for _, x := range xs {
+		if p(x) {
+			return true
+		}
+	}
+	return false
+}
+
 func HumanReadableSize(bytes int64) string {
 	units := []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"}
 	unitIdx := 0
