@@ -246,7 +246,6 @@ func (p *fileProvider) Sync(config config.SyncConfig) error {
 			return err
 		}
 
-		slog.Info("copying src file to temp", "file", src.path)
 		_, _, err = config.SrcExecutor.ExecuteCommand("cp", "-a", src.path, targetDir)
 		if err != nil {
 			return err
