@@ -65,6 +65,21 @@ func TestSync(t *testing.T) {
 			},
 		},
 		{
+			"skip copy file to different name if timestamps match",
+			false,
+			"test.txt",
+			[]fileDef{
+				{"test.txt", EARLY_MOD_TIME, "foobar"},
+			},
+			"test2.txt",
+			[]fileDef{
+				{"test2.txt", EARLY_MOD_TIME, "barbaz"},
+			},
+			[]fileDef{
+				{"test2.txt", EARLY_MOD_TIME, "barbaz"},
+			},
+		},
+		{
 			"copy file to empty dir with different name",
 			false,
 			"test.txt",

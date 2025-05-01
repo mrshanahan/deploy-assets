@@ -48,6 +48,9 @@ type fileInfo struct {
 	DirExists   bool
 }
 
+// TODO: This is all fucked up. There shouldn't be all this random branching for dir/non-dir & we should just
+// treat it as a collection of absolute paths mapped from one to the other. Fix this!
+
 func loadFileEntries(finfo *fileInfo, executor config.Executor, recursive bool) (map[string]*fileEntry, error) {
 	server := executor.Name()
 	entries := make(map[string]*fileEntry)
@@ -196,7 +199,7 @@ func (p *fileProvider) Sync(config config.SyncConfig) error {
 		return err
 	}
 
-	entriesToTransfer := compareFilesForTransfer(srcEntries, dstEntries, dstFileInfo)
+	entriesToTransfer := compareFilesForTransfer(srcEntries, dstEntries, srcFileInfo, dstFileInfo)
 
 	if len(entriesToTransfer) == 0 {
 		slog.Info("no files to transfer", "name", p.Name(), "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name())
@@ -300,25 +303,46 @@ func (p *fileProvider) Sync(config config.SyncConfig) error {
 	return nil
 }
 
-func compareFilesForTransfer(src, dst map[string]*fileEntry, dstFileInfo *fileInfo) []*mappedFileEntry {
+func compareFilesForTransfer(src, dst map[string]*fileEntry, srcFileInfo, dstFileInfo *fileInfo) []*mappedFileEntry {
 	entries := []*mappedFileEntry{}
-	for k, srce := range src {
-		dste, existse := dst[k]
-		if !existse {
-			var dstTargetPath string
-			if dstFileInfo.IsDirectory {
-				dstTargetPath = filepath.Join(dstFileInfo.FullPath, srce.relativePath)
-			} else {
-				dstTargetPath = dstFileInfo.FullPath
+	if srcFileInfo.IsDirectory {
+		for k, srce := range src {
+			dste, existse := dst[k]
+			if !existse {
+				dstTargetPath := filepath.Join(dstFileInfo.FullPath, srce.relativePath)
+				entries = append(entries, &mappedFileEntry{
+					Src: srce,
+					Dst: &targetFileEntry{
+						path:      dstTargetPath,
+						fileEntry: nil,
+					},
+				})
+				// } else if srce.modifiedAt.After(dste.modifiedAt) {
+			} else if srce.modifiedAt != dste.modifiedAt {
+				entries = append(entries, &mappedFileEntry{
+					Src: srce,
+					Dst: &targetFileEntry{
+						path:      dste.path,
+						fileEntry: dste,
+					},
+				})
 			}
+		}
+	} else {
+		if len(src) > 1 {
+			panic("more than 1 source item for non-dir resource - not supported!")
+		}
+		dstk := filepath.Base(dstFileInfo.FullPath)
+		dste, existse := dst[dstk]
+		srce := util.Values(src)[0]
+		if !existse {
 			entries = append(entries, &mappedFileEntry{
 				Src: srce,
 				Dst: &targetFileEntry{
-					path:      dstTargetPath,
+					path:      dstFileInfo.FullPath,
 					fileEntry: nil,
 				},
 			})
-			// } else if srce.modifiedAt.After(dste.modifiedAt) {
 		} else if srce.modifiedAt != dste.modifiedAt {
 			entries = append(entries, &mappedFileEntry{
 				Src: srce,
@@ -328,6 +352,8 @@ func compareFilesForTransfer(src, dst map[string]*fileEntry, dstFileInfo *fileIn
 				},
 			})
 		}
+
 	}
+
 	return entries
 }
