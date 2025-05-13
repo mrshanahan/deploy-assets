@@ -49,6 +49,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	for _, e := range util.Values(manifest.Executors) {
+		defer e.Close()
+	}
+
 	for _, providerConfig := range manifest.Providers {
 		src, dst := providerConfig.Src, providerConfig.Dst
 		srcExecutor := manifest.Executors[src]
