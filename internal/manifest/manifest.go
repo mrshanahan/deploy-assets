@@ -131,19 +131,27 @@ func buildProviders(root *ManifestNode, manifest *Manifest) []error {
 			continue
 		}
 
+		postCommand := a.Attributes["post_command"].GetValue().(string)
+		runPostCommand := a.Attributes["run_post_command"].GetValue().(string)
+		// TODO: move this validation elsewhere/introduce an "enum" type
+		if runPostCommand != "always" && runPostCommand != "on_changed" {
+			errs = append(errs, fmt.Errorf("invalid post-command condition: %s", runPostCommand))
+			continue
+		}
+
+		providerConfig := &config.ProviderConfig{
+			Src:            src,
+			Dst:            dst,
+			PostCommand:    postCommand,
+			RunPostCommand: runPostCommand,
+		}
+
 		switch a.Type {
 		case "file":
 			srcPath := a.Attributes["src_path"].GetValue().(string)
 			dstPath := a.Attributes["dst_path"].GetValue().(string)
 			recursive := a.Attributes["recursive"].GetValue().(bool)
-			postCommand := a.Attributes["post_command"].GetValue().(string)
-			providerConfig := &config.ProviderConfig{
-				Provider:    provider.NewFileProvider(name, srcPath, dstPath, recursive),
-				Src:         src,
-				Dst:         dst,
-				PostCommand: postCommand,
-			}
-			manifest.Providers = append(manifest.Providers, providerConfig)
+			providerConfig.Provider = provider.NewFileProvider(name, srcPath, dstPath, recursive)
 		case "docker_image":
 			repositoryAttr := a.Attributes["repository"]
 			var repositories []string
@@ -152,17 +160,13 @@ func buildProviders(root *ManifestNode, manifest *Manifest) []error {
 			} else {
 				repositories = repositoryAttr.GetValue().([]string)
 			}
-			postCommand := a.Attributes["post_command"].GetValue().(string)
-			providerConfig := &config.ProviderConfig{
-				Provider:    provider.NewDockerProvider(name, repositories...),
-				Src:         src,
-				Dst:         dst,
-				PostCommand: postCommand,
-			}
-			manifest.Providers = append(manifest.Providers, providerConfig)
+			providerConfig.Provider = provider.NewDockerProvider(name, repositories...)
 		default:
 			errs = append(errs, fmt.Errorf("unknown provider type: %s", a.Type))
+			continue
 		}
+
+		manifest.Providers = append(manifest.Providers, providerConfig)
 	}
 	return errs
 }

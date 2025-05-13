@@ -16,14 +16,15 @@ type SyncConfig struct {
 
 type Provider interface {
 	Name() string
-	Sync(config SyncConfig) error
+	Sync(config SyncConfig) (bool, error)
 }
 
 type ProviderConfig struct {
-	Provider    Provider
-	Src         string
-	Dst         string
-	PostCommand string
+	Provider       Provider
+	Src            string
+	Dst            string
+	PostCommand    string
+	RunPostCommand string
 }
 
 type Transport interface {

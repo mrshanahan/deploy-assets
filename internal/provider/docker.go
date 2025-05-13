@@ -28,21 +28,21 @@ type dockerProvider struct {
 func (p *dockerProvider) Name() string { return p.name }
 
 // TODO: Clean up old temp folders (?)
-func (p *dockerProvider) Sync(config config.SyncConfig) error {
+func (p *dockerProvider) Sync(config config.SyncConfig) (bool, error) {
 	srcEntries, err := loadDockerImageEntries(config.SrcExecutor, p.repositories)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	dstEntries, err := loadDockerImageEntries(config.DstExecutor, p.repositories)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	entriesToTransfer := getEntriesToTransfer(srcEntries, dstEntries)
 	if len(entriesToTransfer) == 0 {
 		slog.Info("no images to transfer", "name", p.Name(), "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name())
-		return nil
+		return false, nil
 	}
 
 	if config.DryRun {
@@ -50,13 +50,13 @@ func (p *dockerProvider) Sync(config config.SyncConfig) error {
 		for _, e := range entriesToTransfer {
 			slog.Info("DRY RUN: copy", "image", e)
 		}
-		return nil
+		return false, nil
 	}
 
 	tempPath := util.GetTempFilePath("deploy-assets-docker")
 	if _, _, err := config.SrcExecutor.ExecuteCommand("mkdir", "-p", tempPath); err != nil {
 		slog.Error("could not create src temp directory", "dir", tempPath, "err", err)
-		return err
+		return false, err
 	}
 	defer config.SrcExecutor.ExecuteCommand("rm", "-rf", tempPath)
 
@@ -91,7 +91,7 @@ func (p *dockerProvider) Sync(config config.SyncConfig) error {
 
 		if _, _, err := config.DstExecutor.ExecuteCommand("mkdir", "-p", tempPath); err != nil {
 			slog.Error("could not create dst temp directory", "dst", dstName, "dir", tempPath, "err", err)
-			return err
+			return false, err
 		}
 		defer config.DstExecutor.ExecuteCommand("rm", "-rf", tempPath)
 
@@ -103,16 +103,16 @@ func (p *dockerProvider) Sync(config config.SyncConfig) error {
 
 		if err := config.Transport.TransferFile(config.SrcExecutor, filePath, config.DstExecutor, filePath); err != nil {
 			slog.Error("failed to transfer file", "dst", dstName, "file", filePath, "err", err)
-			return err
+			return false, err
 		}
 
 		if _, stderr, err := config.DstExecutor.ExecuteShell(fmt.Sprintf("cat %s | sudo docker load", filePath)); err != nil {
 			slog.Error("failed to load image on remote", "dst", dstName, "file", filePath, "image", e.Repository, "stderr", stderr, "err", err)
-			return err
+			return false, err
 		}
 	}
 
-	return nil
+	return true, nil
 }
 
 func getEntriesToTransfer(src, dst map[string]*dockerImageEntry) []*dockerImageEntry {

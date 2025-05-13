@@ -81,12 +81,13 @@ func main() {
 				}
 			}
 
-			if err := providerConfig.Provider.Sync(config.SyncConfig{
+			synced, err := providerConfig.Provider.Sync(config.SyncConfig{
 				SrcExecutor: srcExecutor,
 				DstExecutor: dstExecutor,
 				Transport:   manifest.Transport,
 				DryRun:      *dryRunParam,
-			}); err != nil {
+			})
+			if err != nil {
 				slog.Error("failed to sync asset",
 					"asset", providerConfig.Provider.Name(),
 					"src", srcExecutor.Name(),
@@ -100,24 +101,37 @@ func main() {
 			}
 
 			if !*dryRunParam && providerConfig.PostCommand != "" {
-				slog.Debug("executing post-command",
-					"asset", providerConfig.Provider.Name(),
-					"src", srcExecutor.Name(),
-					"dst", dstExecutor.Name())
-				stdout, stderr, err := dstExecutor.ExecuteShell(providerConfig.PostCommand)
-				if err != nil {
-					slog.Error("failed to execute post-command",
+				if providerConfig.RunPostCommand == "always" || (providerConfig.RunPostCommand == "on_changed" && synced) {
+					slog.Info("executing post-command",
+						"command", providerConfig.PostCommand,
+						"run-post-command", providerConfig.RunPostCommand,
+						"synced", synced,
 						"asset", providerConfig.Provider.Name(),
 						"src", srcExecutor.Name(),
-						"dst", dstExecutor.Name(),
-						"err", err,
-						"stdout", stdout,
-						"stderr", stderr)
-					if !*continueOnErrorParam {
-						os.Exit(1)
-					} else {
-						slog.Warn("continuing with remaining destinations despite error")
+						"dst", dstExecutor.Name())
+					stdout, stderr, err := dstExecutor.ExecuteShell(providerConfig.PostCommand)
+					if err != nil {
+						slog.Error("failed to execute post-command",
+							"asset", providerConfig.Provider.Name(),
+							"src", srcExecutor.Name(),
+							"dst", dstExecutor.Name(),
+							"err", err,
+							"stdout", stdout,
+							"stderr", stderr)
+						if !*continueOnErrorParam {
+							os.Exit(1)
+						} else {
+							slog.Warn("continuing with remaining destinations despite error")
+						}
 					}
+				} else {
+					slog.Debug("skipping post-command execution",
+						"command", providerConfig.PostCommand,
+						"run-post-command", providerConfig.RunPostCommand,
+						"synced", synced,
+						"asset", providerConfig.Provider.Name(),
+						"src", srcExecutor.Name(),
+						"dst", dstExecutor.Name())
 				}
 			}
 		}

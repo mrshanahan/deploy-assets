@@ -320,7 +320,8 @@ func executeTest(test testDef, t *testing.T) {
 		DryRun:      false,
 	}
 
-	if err := sut.Sync(config); err != nil {
+	// TODO: Actually test return value
+	if _, err := sut.Sync(config); err != nil {
 		t.Fatalf("sync failed: %v", err)
 	}
 
