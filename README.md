@@ -41,9 +41,51 @@ For more options use the `-help` flag:
 
     $ deploy-assets -help
 
+## Authentication
+
+### AWS (`s3` transport)
+
+The `s3` transport type will be the most common way to upload files to an AWS-based instance. To authenticate you can use the `aws configure sso` command, which will have you create and name an AWS _profile_.
+
+You can control the default AWS CLI profile using the `AWS_DEFAULT_PROFILE` environment variable. Set that either in a profile script or on the command line to control which profile you are using:
+
+    $ AWS_DEFAULT_PROFILE=aws-deploy-assets deploy-assets -manifest ./foo-manifest.json
+
+See [this page](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html) for information on configuring the IAM Identity Center authentication with the AWS CLI.
+
+### SSH (`ssh` executor)
+
+The `ssh` executor allows you to specify a remote user (`username`), private key (`key_file`), and private key passphrase (`key_file_passphrase`) for this executor. The passhprase is optional, and `deploy-assets` will treat an empty value for `key_file_passphrase` as an indicator that the key file is unencrypted.
+
+Thus, for the following location block:
+
+    {
+        "locations": [
+            {
+                "type": "ssh",
+                "name": "remote",
+                "server": "foo.internal:22",
+                "username": "{{ SSH_USERNAME }}",
+                "key_file": "{{ SSH_KEY_FILE }}",
+                "key_file_passphrase": "{{ SSH_KEY_FILE_PASSPHRASE }}"
+            },
+            ...
+        ],
+        ...
+    }
+
+The following will work for an unencrypted key `id_rsa_unencrypted`:
+
+    $ SSH_USERNAME=ubuntu SSH_KEY_FILE=~/.ssh/id_rsa_unencrypted deploy-assets -manifest ./foo-manifest.json
+
+And the following will work for an encrypted key `id_rsa_encrypted`:
+
+    $ read -p "Enter passphrase for ssh key file: " -s ssh_key_file_passphrase
+    $ SSH_USERNAME=ubuntu SSH_KEY_FILE=~/.ssh/id_rsa_encrypted SSH_KEY_FILE_PASSPHRASE=$ssh_key_file_passphrase deploy-assets -manifest ./foo-manifest.json
+
 ## Manifest
 
-The following types are available for each section:
+The _manifest_ is a JSON file that defines what assets need to be copied, where they are going, and how they are getting there. It is fundamentally a single object with three major subsections: `locations`, `transport`, and `assets`.
 
 ### `locations`
 
@@ -82,6 +124,17 @@ This is currently a single object rather than a collection. All transport types 
     - `repository` (**required**, `string` or `string[]`): Names of images to package & transfer.
         - Wildcards are not accepted here; they will be treated literally.
 
+### Variable expansion
+
+Using `{{ VARIABLE_NAME }}` within a string in the manifest will cause that block to be replaced by the value of the environment variable `VARIABLE_NAME` at runtime. If the environment variable is empty or not defined, the replacement will be empty.
+
+For example, say we have the value of `key_file` in an `ssh` location has the value `"{{ SSH_KEY_FILE }}"`.
+
+- If we run `SSH_KEY_FILE=./id_rsa deploy-assets -manifest foo-manifest.json`, then `key_file` will have the value `"./id_rsa"`.
+- If we run `deploy-assets -manifest foo-manifest.json` (and `SSH_KEY_FILE` is not set elsewhere), then `key_file` will have the value `""`.
+
+Note that **path expansion is not supported (currently) in the manifest!** We assume all paths are absolute paths, so using `SSH_KEY_FILE=~/.ssh/id_rsa` would cause an error when setting up the SSH connection. Ensure paths are expanded in the shell before passing them to `deploy-assets`.
+
 ## Caveats
 
 - This is not a super sophisticated tool - there are no retries nor lots of flexible options. It serves my own needs specifically.
@@ -101,6 +154,6 @@ A Makefile is provided that will run basic commands, including installing the bi
     $ make build        # Same as above
     $ make run          # Default go run
     $ make test         # Runs all known tests
-    $ make install      # Builds binary to ~/bin/deploy-assets
+    $ make install      # Builds binary to ~/.local/bin/deploy-assets
     $ make install \    # Override default install directory
         INSTALL_DIR=/usr/local/bin

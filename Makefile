@@ -1,6 +1,6 @@
 .DEFAULT_GOAL: build
 
-INSTALL_DIR ?= ~/bin
+INSTALL_DIR ?= ~/.local/bin
 
 build:
 	go build -o "$(CURDIR)/cmd/deploy-assets" "$(CURDIR)/cmd/deploy-assets.go"

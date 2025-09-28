@@ -71,6 +71,8 @@ func subVarValue(s string) string {
 		varVal, prs := os.LookupEnv(varName)
 		if prs {
 			finalVal = fmt.Sprintf("%s%s%s", finalVal[:wholeStart], varVal, finalVal[wholeEnd:])
+		} else {
+			finalVal = ""
 		}
 	}
 	return finalVal

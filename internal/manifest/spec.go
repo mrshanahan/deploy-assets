@@ -132,6 +132,7 @@ func (s *SSHLocationItemSpec) Attributes() []AttributeSpec {
 			RequiredAttribute("server", "string"),
 			RequiredAttribute("username", "string"),
 			RequiredAttribute("key_file", "string"),
+			OptionalAttribute("key_file_passphrase", "string", ""),
 			OptionalAttribute("run_elevated", "bool", false), // TODO: specify default value?
 		}...,
 	)

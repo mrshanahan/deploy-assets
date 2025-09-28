@@ -68,8 +68,9 @@ func buildExecutors(root *ManifestNode, manifest *Manifest) []error {
 			addr := l.Attributes["server"].GetValue().(string)
 			user := l.Attributes["username"].GetValue().(string)
 			keyPath := l.Attributes["key_file"].GetValue().(string)
+			keyPassphrase := l.Attributes["key_file_passphrase"].GetValue().(string)
 			runElevated := l.Attributes["run_elevated"].GetValue().(bool)
-			exec, err := executor.NewSSHExecutor(name, addr, user, keyPath, runElevated)
+			exec, err := executor.NewSSHExecutor(name, addr, user, keyPath, keyPassphrase, runElevated)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("failed to initialize executor for location '%s': %v", name, err))
 			} else {
