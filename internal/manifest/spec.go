@@ -187,6 +187,7 @@ func (s *DockerImageAssetItemSpec) Attributes() []AttributeSpec {
 		GetDefaultAssetItemAttributes(),
 		[]AttributeSpec{
 			RequiredAttribute("repository", "string|[]string"),
+			OptionalAttribute("compare_label", "string", ""),
 		}...,
 	)
 }

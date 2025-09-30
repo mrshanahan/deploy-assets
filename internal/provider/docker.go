@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -10,31 +11,32 @@ import (
 
 	"github.com/mrshanahan/deploy-assets/internal/config"
 	"github.com/mrshanahan/deploy-assets/internal/util"
-	"github.com/pkg/errors"
 )
 
-func NewDockerProvider(name string, repositories ...string) config.Provider {
+func NewDockerProvider(name string, repositories []string, compareLabel string) config.Provider {
 	return &dockerProvider{
 		name:         name,
 		repositories: repositories,
+		compareLabel: compareLabel,
 	}
 }
 
 type dockerProvider struct {
 	name         string
 	repositories []string
+	compareLabel string
 }
 
 func (p *dockerProvider) Name() string { return p.name }
 
 // TODO: Clean up old temp folders (?)
 func (p *dockerProvider) Sync(config config.SyncConfig) (bool, error) {
-	srcEntries, err := loadDockerImageEntries(config.SrcExecutor, p.repositories)
+	srcEntries, err := loadDockerImageEntries(config.SrcExecutor, p.repositories, p.compareLabel)
 	if err != nil {
 		return false, err
 	}
 
-	dstEntries, err := loadDockerImageEntries(config.DstExecutor, p.repositories)
+	dstEntries, err := loadDockerImageEntries(config.DstExecutor, p.repositories, p.compareLabel)
 	if err != nil {
 		return false, err
 	}
@@ -119,7 +121,10 @@ func getEntriesToTransfer(src, dst map[string]*dockerImageEntry) []*dockerImageE
 	entries := []*dockerImageEntry{}
 	for k, srce := range src {
 		dste, existse := dst[k]
-		if !existse || srce.ID != dste.ID { // && srce.CreatedAt.After(dste.CreatedAt)) {
+		if !existse || srce.CompareValue != dste.CompareValue { // && srce.CreatedAt.After(dste.CreatedAt)) {
+			slog.Debug("found image entry to transfer",
+				"src", srce,
+				"dst", dste)
 			entries = append(entries, srce)
 		}
 	}
@@ -127,12 +132,19 @@ func getEntriesToTransfer(src, dst map[string]*dockerImageEntry) []*dockerImageE
 }
 
 // TODO: figure out digests - currently none of the images have digests
-func loadDockerImageEntries(executor config.Executor, repositories []string) (map[string]*dockerImageEntry, error) {
-	dockerArgs := []string{"image", "ls", "--format", "{{ .Repository }},{{ .ID }},{{ .CreatedAt }}"}
-	for _, r := range repositories {
-		dockerArgs = append(dockerArgs, "--filter")
-		dockerArgs = append(dockerArgs, fmt.Sprintf("reference=%s", r))
+func loadDockerImageEntries(executor config.Executor, repositories []string, compareLabel string) (map[string]*dockerImageEntry, error) {
+	var compareLabelFormat string
+	if compareLabel != "" {
+		// TODO: Make sure funky stuff can't happen here with a carefully-crafted label
+		compareLabelFormat = fmt.Sprintf("{{ index .Config.Labels \"%s\" }}", compareLabel)
+	} else {
+		compareLabelFormat = "{{ \"\" }}"
 	}
+
+	dockerInspectFormat := fmt.Sprintf("{{ index .RepoTags 0 }},{{ .ID }},{{ .Created }},%s", compareLabelFormat)
+	dockerArgs := []string{"image", "inspect", "--format", dockerInspectFormat}
+	dockerArgs = append(dockerArgs, repositories...)
+
 	stdout, _, err := executor.ExecuteCommand("docker", dockerArgs...)
 	if err != nil {
 		return nil, err
@@ -141,6 +153,22 @@ func loadDockerImageEntries(executor config.Executor, repositories []string) (ma
 	entries, err := parseDockerImageEntries(stdout)
 	if err != nil {
 		return nil, err
+	}
+
+	for _, e := range entries {
+		if e.CompareValue == "" {
+			if compareLabel != "" {
+				slog.Warn("could not find compare_label label on image; defaulting to id",
+					"location", executor.Name(),
+					"image-repository", e.Repository,
+					"image-id", e.ID,
+					"label", compareLabel)
+			}
+			e.CompareValue = fmt.Sprintf("@id:%s", e.ID)
+		} else {
+			// If label is e.g. "foo.bar" and label value is "baz", then final CompareValue is "foo.bar:baz"
+			e.CompareValue = fmt.Sprintf("%s:%s", compareLabel, e.CompareValue)
+		}
 	}
 
 	entriesMap := make(map[string]*dockerImageEntry)
@@ -152,9 +180,28 @@ func loadDockerImageEntries(executor config.Executor, repositories []string) (ma
 }
 
 type dockerImageEntry struct {
-	Repository string
-	ID         string
-	CreatedAt  time.Time
+	Repository   string
+	ID           string
+	CreatedAt    time.Time
+	CompareValue string
+}
+
+func tryParseTimes(layouts []string, value string) (time.Time, error) {
+	errs := []error{}
+	var parsed *time.Time
+	for _, l := range layouts {
+		if t, err := time.Parse(l, value); err != nil {
+			errs = append(errs, err)
+		} else {
+			parsed = &t
+			break
+		}
+	}
+
+	if parsed != nil {
+		return *parsed, nil
+	}
+	return time.Time{}, errors.Join(errs...)
 }
 
 func parseDockerImageEntries(output string) ([]*dockerImageEntry, error) {
@@ -162,17 +209,26 @@ func parseDockerImageEntries(output string) ([]*dockerImageEntry, error) {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	for i, l := range lines {
 		comps := strings.Split(l, ",")
-		if len(comps) != 3 {
-			return nil, errors.Errorf("Error in `docker image ls` output line %d (wrong number of CSV components): %s", i+1, l)
+		if len(comps) != 4 {
+			return nil, fmt.Errorf("error in `docker image ls` output line %d (wrong number of CSV components): %s", i+1, l)
 		}
-		createdAt, err := time.Parse("2006-01-02 15:04:05 -0700 MST", comps[2])
+		createdAt, err := tryParseTimes(
+			[]string{
+				// Docker image timestamps appear to have an imprecise number of zeroes. :/
+				"2006-01-02T15:04:05.000000000-07:00",
+				"2006-01-02T15:04:05.00000000-07:00",
+				"2006-01-02T15:04:05.0000000-07:00",
+				"2006-01-02T15:04:05.000000-07:00",
+				"2006-01-02T15:04:05.000000000Z"},
+			comps[2])
 		if err != nil {
-			return nil, errors.Errorf("Error in `docker image ls` output line %d (invalid date: %v): %s", i+1, err, l)
+			return nil, fmt.Errorf("error in `docker image ls` output line %d (invalid date: %v): %s", i+1, err, l)
 		}
 		entries = append(entries, &dockerImageEntry{
-			Repository: comps[0],
-			ID:         comps[1],
-			CreatedAt:  createdAt,
+			Repository:   comps[0],
+			ID:           comps[1],
+			CreatedAt:    createdAt,
+			CompareValue: comps[3],
 		})
 	}
 	return entries, nil

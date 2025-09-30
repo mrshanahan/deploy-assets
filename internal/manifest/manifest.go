@@ -154,6 +154,7 @@ func buildProviders(root *ManifestNode, manifest *Manifest) []error {
 			recursive := a.Attributes["recursive"].GetValue().(bool)
 			providerConfig.Provider = provider.NewFileProvider(name, srcPath, dstPath, recursive)
 		case "docker_image":
+			compareLabel := a.Attributes["compare_label"].GetValue().(string)
 			repositoryAttr := a.Attributes["repository"]
 			var repositories []string
 			if repositoryAttr.MatchingValueType == "string" {
@@ -161,7 +162,7 @@ func buildProviders(root *ManifestNode, manifest *Manifest) []error {
 			} else {
 				repositories = repositoryAttr.GetValue().([]string)
 			}
-			providerConfig.Provider = provider.NewDockerProvider(name, repositories...)
+			providerConfig.Provider = provider.NewDockerProvider(name, repositories, compareLabel)
 		default:
 			errs = append(errs, fmt.Errorf("unknown provider type: %s", a.Type))
 			continue
