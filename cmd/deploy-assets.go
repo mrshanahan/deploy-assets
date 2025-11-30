@@ -100,16 +100,16 @@ func main() {
 				}
 			}
 
-			if !*dryRunParam && providerConfig.PostCommand != "" {
-				if providerConfig.RunPostCommand == "always" || (providerConfig.RunPostCommand == "on_changed" && synced) {
+			for _, postCommand := range providerConfig.PostCommands {
+				if !*dryRunParam || postCommand.Trigger == "always" || (postCommand.Trigger == "on_changed" && synced) {
 					slog.Info("executing post-command",
-						"command", providerConfig.PostCommand,
-						"run-post-command", providerConfig.RunPostCommand,
+						"command", postCommand.Command,
+						"trigger", postCommand.Trigger,
 						"synced", synced,
 						"asset", providerConfig.Provider.Name(),
 						"src", srcExecutor.Name(),
 						"dst", dstExecutor.Name())
-					stdout, stderr, err := dstExecutor.ExecuteShell(providerConfig.PostCommand)
+					stdout, stderr, err := dstExecutor.ExecuteShell(postCommand.Command)
 					if err != nil {
 						slog.Error("failed to execute post-command",
 							"asset", providerConfig.Provider.Name(),
@@ -126,8 +126,8 @@ func main() {
 					}
 				} else {
 					slog.Debug("skipping post-command execution",
-						"command", providerConfig.PostCommand,
-						"run-post-command", providerConfig.RunPostCommand,
+						"command", postCommand.Command,
+						"trigger", postCommand.Trigger,
 						"synced", synced,
 						"asset", providerConfig.Provider.Name(),
 						"src", srcExecutor.Name(),
@@ -135,7 +135,6 @@ func main() {
 				}
 			}
 		}
-
 	}
 }
 

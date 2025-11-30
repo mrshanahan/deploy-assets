@@ -159,8 +159,7 @@ func GetDefaultAssetItemAttributes() []AttributeSpec {
 		[]AttributeSpec{
 			RequiredAttribute("src", "string"),
 			RequiredAttribute("dst", "string"),
-			OptionalAttribute("post_command", "string", ""),
-			OptionalAttribute("run_post_command", "string", "on_changed"),
+			OptionalAttribute("post_command", "[]object", nil),
 		}...,
 	)
 }

@@ -124,27 +124,51 @@ func buildProviders(root *ManifestNode, manifest *Manifest) []error {
 		dst := a.Attributes["dst"].GetValue().(string)
 
 		if _, prs := manifest.Executors[src]; !prs {
-			errs = append(errs, fmt.Errorf("no such location: %s", src))
+			errs = append(errs, fmt.Errorf("%s: no such location: %s", name, src))
 			continue
 		}
 		if _, prs := manifest.Executors[dst]; !prs && dst != "*" {
-			errs = append(errs, fmt.Errorf("no such location: %s", dst))
+			errs = append(errs, fmt.Errorf("%s: no such location: %s", name, dst))
 			continue
 		}
 
-		postCommand := a.Attributes["post_command"].GetValue().(string)
-		runPostCommand := a.Attributes["run_post_command"].GetValue().(string)
-		// TODO: move this validation elsewhere/introduce an "enum" type
-		if runPostCommand != "always" && runPostCommand != "on_changed" {
-			errs = append(errs, fmt.Errorf("invalid post-command condition: %s", runPostCommand))
-			continue
+		postCommandsRaw := a.Attributes["post_command"].GetValue().([]map[string]any)
+		postCommands := []*config.PostCommand{}
+		for i, c := range postCommandsRaw {
+			cmdRaw, prs := c["command"]
+			if !prs {
+				errs = append(errs, fmt.Errorf("%s: post-command[%d]: no command provided", name, i))
+				continue
+			}
+			cmd, ok := cmdRaw.(string)
+			if !ok {
+				errs = append(errs, fmt.Errorf("%s: post-command[%d]: invalid command - not a string (%v)", name, i, cmdRaw))
+				continue
+			}
+
+			triggerRaw, prs := c["trigger"]
+			if !prs {
+				errs = append(errs, fmt.Errorf("%s: post-command[%d]: no trigger provided", name, i))
+				continue
+			}
+			trigger, ok := triggerRaw.(string)
+			if !ok {
+				errs = append(errs, fmt.Errorf("%s: post-command[%d]: invalid trigger - not a string (%v)", name, i, triggerRaw))
+				continue
+			}
+
+			if trigger != "always" && trigger != "on_changed" {
+				errs = append(errs, fmt.Errorf("%s: post-command[%d]: invalid post-command trigger - %s", name, i, trigger))
+				continue
+			}
+
+			postCommands = append(postCommands, &config.PostCommand{Command: cmd, Trigger: trigger})
 		}
 
 		providerConfig := &config.ProviderConfig{
-			Src:            src,
-			Dst:            dst,
-			PostCommand:    postCommand,
-			RunPostCommand: runPostCommand,
+			Src:          src,
+			Dst:          dst,
+			PostCommands: postCommands,
 		}
 
 		switch a.Type {
