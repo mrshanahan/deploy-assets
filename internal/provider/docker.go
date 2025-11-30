@@ -30,40 +30,40 @@ type dockerProvider struct {
 func (p *dockerProvider) Name() string { return p.name }
 
 // TODO: Clean up old temp folders (?)
-func (p *dockerProvider) Sync(config config.SyncConfig) (bool, error) {
-	srcEntries, err := loadDockerImageEntries(config.SrcExecutor, p.repositories, p.compareLabel)
+func (p *dockerProvider) Sync(cfg config.SyncConfig) (config.SyncResult, error) {
+	srcEntries, err := loadDockerImageEntries(cfg.SrcExecutor, p.repositories, p.compareLabel)
 	if err != nil {
-		return false, err
+		return config.SYNC_RESULT_NOCHANGE, err
 	}
 
-	dstEntries, err := loadDockerImageEntries(config.DstExecutor, p.repositories, p.compareLabel)
+	dstEntries, err := loadDockerImageEntries(cfg.DstExecutor, p.repositories, p.compareLabel)
 	if err != nil {
-		return false, err
+		return config.SYNC_RESULT_NOCHANGE, err
 	}
 
-	entriesToTransfer := getEntriesToTransfer(srcEntries, dstEntries)
+	entriesToTransfer, changeType := getEntriesToTransfer(srcEntries, dstEntries)
 	if len(entriesToTransfer) == 0 {
-		slog.Info("no images to transfer", "name", p.Name(), "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name())
-		return false, nil
+		slog.Info("no images to transfer", "name", p.Name(), "src", cfg.SrcExecutor.Name(), "dst", cfg.DstExecutor.Name())
+		return config.SYNC_RESULT_NOCHANGE, nil
 	}
 
-	if config.DryRun {
-		slog.Info("DRY RUN: copying images", "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name())
+	if cfg.DryRun {
+		slog.Info("DRY RUN: copying images", "src", cfg.SrcExecutor.Name(), "dst", cfg.DstExecutor.Name())
 		for _, e := range entriesToTransfer {
 			slog.Info("DRY RUN: copy", "image", e)
 		}
-		return false, nil
+		return config.SYNC_RESULT_NOCHANGE, nil
 	}
 
 	tempPath := util.GetTempFilePath("deploy-assets-docker")
-	if _, _, err := config.SrcExecutor.ExecuteCommand("mkdir", "-p", tempPath); err != nil {
+	if _, _, err := cfg.SrcExecutor.ExecuteCommand("mkdir", "-p", tempPath); err != nil {
 		slog.Error("could not create src temp directory", "dir", tempPath, "err", err)
-		return false, err
+		return config.SYNC_RESULT_NOCHANGE, err
 	}
-	defer config.SrcExecutor.ExecuteCommand("rm", "-rf", tempPath)
+	defer cfg.SrcExecutor.ExecuteCommand("rm", "-rf", tempPath)
 
-	srcName := config.SrcExecutor.Name()
-	dstName := config.DstExecutor.Name()
+	srcName := cfg.SrcExecutor.Name()
+	dstName := cfg.DstExecutor.Name()
 
 	slog.Info("syncing docker images", "src", srcName, "dst", dstName)
 
@@ -74,12 +74,12 @@ func (p *dockerProvider) Sync(config config.SyncConfig) (bool, error) {
 		fileName := strings.Replace(e.Repository, "/", "_", -1) + ".tar.gz"
 		filePath := filepath.Join(tempPath, fileName)
 
-		if _, stderr, err := config.SrcExecutor.ExecuteCommand("docker", "save", e.Repository, "-o", filePath); err != nil {
+		if _, stderr, err := cfg.SrcExecutor.ExecuteCommand("docker", "save", e.Repository, "-o", filePath); err != nil {
 			slog.Error("failed to export image", "src", srcName, "dst", dstName, "image", e.Repository, "stderr", stderr, "err", err)
 		}
 
 		fileSize := ""
-		stdout, _, err := config.SrcExecutor.ExecuteCommand("stat", "-c", "%s", filePath)
+		stdout, _, err := cfg.SrcExecutor.ExecuteCommand("stat", "-c", "%s", filePath)
 		if err != nil {
 			slog.Warn("failed to get file size; continuing without it", "src", srcName, "dst", dstName, "image", e.Repository, "err", err)
 		} else {
@@ -91,11 +91,11 @@ func (p *dockerProvider) Sync(config config.SyncConfig) (bool, error) {
 			}
 		}
 
-		if _, _, err := config.DstExecutor.ExecuteCommand("mkdir", "-p", tempPath); err != nil {
+		if _, _, err := cfg.DstExecutor.ExecuteCommand("mkdir", "-p", tempPath); err != nil {
 			slog.Error("could not create dst temp directory", "dst", dstName, "dir", tempPath, "err", err)
-			return false, err
+			return config.SYNC_RESULT_NOCHANGE, err
 		}
-		defer config.DstExecutor.ExecuteCommand("rm", "-rf", tempPath)
+		defer cfg.DstExecutor.ExecuteCommand("rm", "-rf", tempPath)
 
 		slog.Info("transferring image",
 			"src", srcName,
@@ -103,32 +103,38 @@ func (p *dockerProvider) Sync(config config.SyncConfig) (bool, error) {
 			"image", e.Repository,
 			"file-size", fileSize)
 
-		if err := config.Transport.TransferFile(config.SrcExecutor, filePath, config.DstExecutor, filePath); err != nil {
+		if err := cfg.Transport.TransferFile(cfg.SrcExecutor, filePath, cfg.DstExecutor, filePath); err != nil {
 			slog.Error("failed to transfer file", "dst", dstName, "file", filePath, "err", err)
-			return false, err
+			return config.SYNC_RESULT_NOCHANGE, err
 		}
 
-		if _, stderr, err := config.DstExecutor.ExecuteShell(fmt.Sprintf("cat %s | sudo docker load", filePath)); err != nil {
+		if _, stderr, err := cfg.DstExecutor.ExecuteShell(fmt.Sprintf("cat %s | sudo docker load", filePath)); err != nil {
 			slog.Error("failed to load image on remote", "dst", dstName, "file", filePath, "image", e.Repository, "stderr", stderr, "err", err)
-			return false, err
+			return config.SYNC_RESULT_NOCHANGE, err
 		}
 	}
 
-	return true, nil
+	return changeType, nil
 }
 
-func getEntriesToTransfer(src, dst map[string]*dockerImageEntry) []*dockerImageEntry {
+func getEntriesToTransfer(src, dst map[string]*dockerImageEntry) ([]*dockerImageEntry, config.SyncResult) {
 	entries := []*dockerImageEntry{}
+	changeType := config.SYNC_RESULT_NOCHANGE
 	for k, srce := range src {
 		dste, existse := dst[k]
 		if !existse || srce.CompareValue != dste.CompareValue { // && srce.CreatedAt.After(dste.CreatedAt)) {
+			if !existse {
+				changeType = config.SYNC_RESULT_CREATED
+			} else if changeType == config.SYNC_RESULT_NOCHANGE {
+				changeType = config.SYNC_RESULT_UPDATED
+			}
 			slog.Debug("found image entry to transfer",
 				"src", srce,
 				"dst", dste)
 			entries = append(entries, srce)
 		}
 	}
-	return entries
+	return entries, changeType
 }
 
 // TODO: figure out digests - currently none of the images have digests

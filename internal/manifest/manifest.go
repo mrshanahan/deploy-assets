@@ -157,7 +157,7 @@ func buildProviders(root *ManifestNode, manifest *Manifest) []error {
 				continue
 			}
 
-			if trigger != "always" && trigger != "on_changed" {
+			if trigger != "always" && trigger != "on_changed" && trigger != "on_created" && trigger != "on_updated" {
 				errs = append(errs, fmt.Errorf("%s: post-command[%d]: invalid post-command trigger - %s", name, i, trigger))
 				continue
 			}

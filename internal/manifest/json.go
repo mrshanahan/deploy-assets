@@ -262,23 +262,17 @@ func checkValueType(v any, types []string) (string, error) {
 				validType = t
 			}
 		case "[]string":
-			vs, ok := v.([]any)
-			if ok {
-				allStrings := util.All(vs, func(x any) bool { _, ok := x.(string); return ok })
-				if allStrings && validType == "" {
-					validType = t
-				}
+			_, ok := v.([]string)
+			if ok && validType == "" {
+				validType = t
 			}
 		case "[]object":
-			vs, ok := v.([]any)
-			if ok {
-				allObjects := util.All(vs, func(x any) bool { _, ok := x.(map[string]any); return ok })
-				if allObjects && validType == "" {
-					validType = t
-				}
+			_, ok := v.([]map[string]any)
+			if ok && validType == "" {
+				validType = t
 			}
 		default:
-			panic(fmt.Sprintf("invalid attribute type: %s", t))
+			return "", fmt.Errorf("invalid attribute type: %s", t)
 		}
 	}
 	if validType == "" {

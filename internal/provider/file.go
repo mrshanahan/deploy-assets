@@ -158,56 +158,56 @@ func getFileInfo(path string, executor config.Executor) (*fileInfo, error) {
 func (p *fileProvider) Name() string { return p.name }
 
 // TODO: Combine tmp file usage, both in code & on system
-func (p *fileProvider) Sync(config config.SyncConfig) (bool, error) {
-	srcFileInfo, err := getFileInfo(p.srcPath, config.SrcExecutor)
+func (p *fileProvider) Sync(cfg config.SyncConfig) (config.SyncResult, error) {
+	srcFileInfo, err := getFileInfo(p.srcPath, cfg.SrcExecutor)
 	if err != nil {
-		return false, err
+		return config.SYNC_RESULT_NOCHANGE, err
 	}
 
 	if !srcFileInfo.Exists {
-		return false, fmt.Errorf("src file is missing")
+		return config.SYNC_RESULT_NOCHANGE, fmt.Errorf("src file is missing")
 	}
 
-	dstFileInfo, err := getFileInfo(p.dstPath, config.DstExecutor)
+	dstFileInfo, err := getFileInfo(p.dstPath, cfg.DstExecutor)
 	if err != nil {
-		return false, err
+		return config.SYNC_RESULT_NOCHANGE, err
 	}
 
 	var dstEntries map[string]*fileEntry
 	if dstFileInfo.Exists {
 		if dstFileInfo.IsDirectory != srcFileInfo.IsDirectory {
-			return false, fmt.Errorf("mismatch in file type")
+			return config.SYNC_RESULT_NOCHANGE, fmt.Errorf("mismatch in file type")
 		}
 
 		// NB: This should work the same way whether or not the source
 		// is a file or a directory.
-		dstEntries, err = loadFileEntries(dstFileInfo, config.DstExecutor, p.recursive)
+		dstEntries, err = loadFileEntries(dstFileInfo, cfg.DstExecutor, p.recursive)
 		if err != nil {
-			return false, err
+			return config.SYNC_RESULT_NOCHANGE, err
 		}
 
 	} else {
 		if !dstFileInfo.DirExists {
-			return false, fmt.Errorf("target base directory does not exist")
+			return config.SYNC_RESULT_NOCHANGE, fmt.Errorf("target base directory does not exist")
 		}
 
 		dstEntries = make(map[string]*fileEntry)
 	}
 
-	srcEntries, err := loadFileEntries(srcFileInfo, config.SrcExecutor, p.recursive)
+	srcEntries, err := loadFileEntries(srcFileInfo, cfg.SrcExecutor, p.recursive)
 	if err != nil {
-		return false, err
+		return config.SYNC_RESULT_NOCHANGE, err
 	}
 
-	entriesToTransfer := compareFilesForTransfer(srcEntries, dstEntries, srcFileInfo, dstFileInfo)
+	entriesToTransfer, changeType := compareFilesForTransfer(srcEntries, dstEntries, srcFileInfo, dstFileInfo)
 
 	if len(entriesToTransfer) == 0 {
-		slog.Info("no files to transfer", "name", p.Name(), "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name())
-		return false, nil
+		slog.Info("no files to transfer", "name", p.Name(), "src", cfg.SrcExecutor.Name(), "dst", cfg.DstExecutor.Name())
+		return config.SYNC_RESULT_NOCHANGE, nil
 	}
 
-	if config.DryRun {
-		slog.Info("DRY RUN: copying files", "name", p.Name(), "src", config.SrcExecutor.Name(), "dst", config.DstExecutor.Name(), "num-files", len(entriesToTransfer))
+	if cfg.DryRun {
+		slog.Info("DRY RUN: copying files", "name", p.Name(), "src", cfg.SrcExecutor.Name(), "dst", cfg.DstExecutor.Name(), "num-files", len(entriesToTransfer))
 		for _, e := range entriesToTransfer {
 			var dstModifiedAt, dstPath any
 			srcPath, srcModifiedAt := e.Src.path, e.Src.modifiedAt.Format(time.RFC3339)
@@ -221,64 +221,64 @@ func (p *fileProvider) Sync(config config.SyncConfig) (bool, error) {
 				"dst-path", dstPath, "dst-modified-at", dstModifiedAt)
 		}
 
-		return false, nil
+		return config.SYNC_RESULT_NOCHANGE, nil
 	}
 
 	tempFolderPath := util.GetTempFilePath("deploy-assets-file")
 	tempPackageFolderName := "package"
 	tempPackageFolderPath := filepath.Join(tempFolderPath, tempPackageFolderName)
-	if _, _, err := config.SrcExecutor.ExecuteCommand("mkdir", "-p", tempPackageFolderPath); err != nil {
+	if _, _, err := cfg.SrcExecutor.ExecuteCommand("mkdir", "-p", tempPackageFolderPath); err != nil {
 		slog.Error("could not create src temp directory", "dir", tempPackageFolderPath, "err", err)
-		return false, err
+		return config.SYNC_RESULT_NOCHANGE, err
 	}
-	defer config.SrcExecutor.ExecuteCommand("rm", "-rf", tempFolderPath)
+	defer cfg.SrcExecutor.ExecuteCommand("rm", "-rf", tempFolderPath)
 
-	srcServerName := config.SrcExecutor.Name()
-	dstServerName := config.DstExecutor.Name()
+	srcServerName := cfg.SrcExecutor.Name()
+	dstServerName := cfg.DstExecutor.Name()
 
 	slog.Info("syncing files", "name", p.Name(), "src", srcServerName, "dst", dstServerName, "num-files", len(entriesToTransfer))
 	for _, mapped := range entriesToTransfer {
 		src := mapped.Src
 		dir := filepath.Dir(src.relativePath)
 		targetDir := filepath.Join(tempPackageFolderPath, dir)
-		_, _, err := config.SrcExecutor.ExecuteCommand("mkdir", "-p", targetDir)
+		_, _, err := cfg.SrcExecutor.ExecuteCommand("mkdir", "-p", targetDir)
 		if err != nil {
-			return false, err
+			return config.SYNC_RESULT_NOCHANGE, err
 		}
 
-		_, _, err = config.SrcExecutor.ExecuteCommand("cp", "-a", src.path, targetDir)
+		_, _, err = cfg.SrcExecutor.ExecuteCommand("cp", "-a", src.path, targetDir)
 		if err != nil {
-			return false, err
+			return config.SYNC_RESULT_NOCHANGE, err
 		}
 	}
 
 	tempPackageName := tempPackageFolderName + ".tar"
 	tempPackagePath := filepath.Join(tempFolderPath, tempPackageName)
-	if _, _, err := config.SrcExecutor.ExecuteCommand("tar", "cvf", tempPackagePath, "-C", tempFolderPath, tempPackageFolderName); err != nil {
-		return false, err
+	if _, _, err := cfg.SrcExecutor.ExecuteCommand("tar", "cvf", tempPackagePath, "-C", tempFolderPath, tempPackageFolderName); err != nil {
+		return config.SYNC_RESULT_NOCHANGE, err
 	}
 
-	if _, _, err := config.SrcExecutor.ExecuteCommand("gzip", tempPackagePath); err != nil {
-		return false, err
+	if _, _, err := cfg.SrcExecutor.ExecuteCommand("gzip", tempPackagePath); err != nil {
+		return config.SYNC_RESULT_NOCHANGE, err
 	}
 	compressedPackagePath := tempPackagePath + ".gz"
 
-	if _, _, err := config.DstExecutor.ExecuteCommand("mkdir", "-p", tempFolderPath); err != nil {
+	if _, _, err := cfg.DstExecutor.ExecuteCommand("mkdir", "-p", tempFolderPath); err != nil {
 		slog.Error("could not create dst temp directory", "dst", dstServerName, "dir", tempFolderPath, "err", err)
-		return false, err
+		return config.SYNC_RESULT_NOCHANGE, err
 	}
-	defer config.DstExecutor.ExecuteCommand("rm", "-rf", tempFolderPath)
+	defer cfg.DstExecutor.ExecuteCommand("rm", "-rf", tempFolderPath)
 
-	if err := config.Transport.TransferFile(config.SrcExecutor, compressedPackagePath, config.DstExecutor, compressedPackagePath); err != nil {
-		return false, err
-	}
-
-	if _, _, err := config.DstExecutor.ExecuteCommand("gunzip", compressedPackagePath); err != nil {
-		return false, err
+	if err := cfg.Transport.TransferFile(cfg.SrcExecutor, compressedPackagePath, cfg.DstExecutor, compressedPackagePath); err != nil {
+		return config.SYNC_RESULT_NOCHANGE, err
 	}
 
-	if _, _, err := config.DstExecutor.ExecuteCommand("tar", "xvf", tempPackagePath, "-C", tempFolderPath); err != nil {
-		return false, err
+	if _, _, err := cfg.DstExecutor.ExecuteCommand("gunzip", compressedPackagePath); err != nil {
+		return config.SYNC_RESULT_NOCHANGE, err
+	}
+
+	if _, _, err := cfg.DstExecutor.ExecuteCommand("tar", "xvf", tempPackagePath, "-C", tempFolderPath); err != nil {
+		return config.SYNC_RESULT_NOCHANGE, err
 	}
 
 	// If dir & dst doesn't exist: 	package 	-> dst
@@ -295,19 +295,21 @@ func (p *fileProvider) Sync(config config.SyncConfig) (bool, error) {
 		srcCopyPath = filepath.Join(tempPackageFolderPath, srcName)
 	}
 
-	if _, _, err := config.DstExecutor.ExecuteShell(fmt.Sprintf("cp -ar %s %s", srcCopyPath, p.dstPath)); err != nil {
-		return false, err
+	if _, _, err := cfg.DstExecutor.ExecuteShell(fmt.Sprintf("cp -ar %s %s", srcCopyPath, p.dstPath)); err != nil {
+		return config.SYNC_RESULT_NOCHANGE, err
 	}
 
-	return true, nil
+	return changeType, nil
 }
 
-func compareFilesForTransfer(src, dst map[string]*fileEntry, srcFileInfo, dstFileInfo *fileInfo) []*mappedFileEntry {
+func compareFilesForTransfer(src, dst map[string]*fileEntry, srcFileInfo, dstFileInfo *fileInfo) ([]*mappedFileEntry, config.SyncResult) {
 	entries := []*mappedFileEntry{}
+	changeType := config.SYNC_RESULT_NOCHANGE
 	if srcFileInfo.IsDirectory {
 		for k, srce := range src {
 			dste, existse := dst[k]
 			if !existse {
+				changeType = config.SYNC_RESULT_CREATED
 				dstTargetPath := filepath.Join(dstFileInfo.FullPath, srce.relativePath)
 				entries = append(entries, &mappedFileEntry{
 					Src: srce,
@@ -318,6 +320,9 @@ func compareFilesForTransfer(src, dst map[string]*fileEntry, srcFileInfo, dstFil
 				})
 				// } else if srce.modifiedAt.After(dste.modifiedAt) {
 			} else if srce.modifiedAt != dste.modifiedAt {
+				if changeType == config.SYNC_RESULT_NOCHANGE {
+					changeType = config.SYNC_RESULT_UPDATED
+				}
 				entries = append(entries, &mappedFileEntry{
 					Src: srce,
 					Dst: &targetFileEntry{
@@ -335,6 +340,7 @@ func compareFilesForTransfer(src, dst map[string]*fileEntry, srcFileInfo, dstFil
 		dste, existse := dst[dstk]
 		srce := util.Values(src)[0]
 		if !existse {
+			changeType = config.SYNC_RESULT_CREATED
 			entries = append(entries, &mappedFileEntry{
 				Src: srce,
 				Dst: &targetFileEntry{
@@ -343,6 +349,9 @@ func compareFilesForTransfer(src, dst map[string]*fileEntry, srcFileInfo, dstFil
 				},
 			})
 		} else if srce.modifiedAt != dste.modifiedAt {
+			if changeType != config.SYNC_RESULT_NOCHANGE {
+				changeType = config.SYNC_RESULT_UPDATED
+			}
 			entries = append(entries, &mappedFileEntry{
 				Src: srce,
 				Dst: &targetFileEntry{
@@ -351,8 +360,7 @@ func compareFilesForTransfer(src, dst map[string]*fileEntry, srcFileInfo, dstFil
 				},
 			})
 		}
-
 	}
 
-	return entries
+	return entries, changeType
 }

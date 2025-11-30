@@ -14,9 +14,17 @@ type SyncConfig struct {
 	DryRun      bool
 }
 
+type SyncResult int
+
+const (
+	SYNC_RESULT_NOCHANGE SyncResult = iota
+	SYNC_RESULT_CREATED
+	SYNC_RESULT_UPDATED
+)
+
 type Provider interface {
 	Name() string
-	Sync(config SyncConfig) (bool, error)
+	Sync(config SyncConfig) (SyncResult, error)
 }
 
 type ProviderConfig struct {

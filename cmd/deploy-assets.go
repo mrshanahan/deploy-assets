@@ -81,7 +81,7 @@ func main() {
 				}
 			}
 
-			synced, err := providerConfig.Provider.Sync(config.SyncConfig{
+			syncResult, err := providerConfig.Provider.Sync(config.SyncConfig{
 				SrcExecutor: srcExecutor,
 				DstExecutor: dstExecutor,
 				Transport:   manifest.Transport,
@@ -101,11 +101,15 @@ func main() {
 			}
 
 			for _, postCommand := range providerConfig.PostCommands {
-				if !*dryRunParam || postCommand.Trigger == "always" || (postCommand.Trigger == "on_changed" && synced) {
+				if !*dryRunParam &&
+					(postCommand.Trigger == "always" ||
+						(syncResult != config.SYNC_RESULT_NOCHANGE && postCommand.Trigger == "on_changed") ||
+						(syncResult == config.SYNC_RESULT_CREATED && postCommand.Trigger == "on_created") ||
+						(syncResult == config.SYNC_RESULT_UPDATED && postCommand.Trigger == "on_updated")) {
 					slog.Info("executing post-command",
 						"command", postCommand.Command,
 						"trigger", postCommand.Trigger,
-						"synced", synced,
+						"synced", syncResult,
 						"asset", providerConfig.Provider.Name(),
 						"src", srcExecutor.Name(),
 						"dst", dstExecutor.Name())
@@ -128,7 +132,7 @@ func main() {
 					slog.Debug("skipping post-command execution",
 						"command", postCommand.Command,
 						"trigger", postCommand.Trigger,
-						"synced", synced,
+						"synced", syncResult,
 						"asset", providerConfig.Provider.Name(),
 						"src", srcExecutor.Name(),
 						"dst", dstExecutor.Name())
