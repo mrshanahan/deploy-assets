@@ -132,28 +132,18 @@ func buildProviders(root *ManifestNode, manifest *Manifest) []error {
 			continue
 		}
 
-		postCommandsRaw := a.Attributes["post_command"].GetValue().([]map[string]any)
+		postCommandsRaw := a.Attributes["post_command"].GetValue().([]map[string]string)
 		postCommands := []*config.PostCommand{}
 		for i, c := range postCommandsRaw {
-			cmdRaw, prs := c["command"]
+			cmd, prs := c["command"]
 			if !prs {
 				errs = append(errs, fmt.Errorf("%s: post-command[%d]: no command provided", name, i))
 				continue
 			}
-			cmd, ok := cmdRaw.(string)
-			if !ok {
-				errs = append(errs, fmt.Errorf("%s: post-command[%d]: invalid command - not a string (%v)", name, i, cmdRaw))
-				continue
-			}
 
-			triggerRaw, prs := c["trigger"]
+			trigger, prs := c["trigger"]
 			if !prs {
 				errs = append(errs, fmt.Errorf("%s: post-command[%d]: no trigger provided", name, i))
-				continue
-			}
-			trigger, ok := triggerRaw.(string)
-			if !ok {
-				errs = append(errs, fmt.Errorf("%s: post-command[%d]: invalid trigger - not a string (%v)", name, i, triggerRaw))
 				continue
 			}
 

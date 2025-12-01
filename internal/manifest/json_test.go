@@ -112,6 +112,9 @@ func TestParseManifest(t *testing.T) {
 		{"{\"locations\": [{ \"type\": \"local\", \"name\": \"local\" }, { \"type\": \"ssh\", \"name\": \"remote\", \"server\": \"foo.com:22\", \"username\": \"test\", \"key_file\": \"/home/test/.ssh/key.pem\" }], \"transport\": {\"type\": \"s3\", \"bucket_url\": \"s3://test\"}, \"assets\": [{ \"type\": \"file\", \"src\": \"local\", \"dst\": \"remote\", \"src_path\": \"package\", \"dst_path\": \"/etc/package\" }]}",
 			isNotNil,
 			isNil},
+		{"{\"locations\": [{ \"type\": \"local\", \"name\": \"local\" }, { \"type\": \"ssh\", \"name\": \"remote\", \"server\": \"foo.com:22\", \"username\": \"test\", \"key_file\": \"/home/test/.ssh/key.pem\" }], \"transport\": {\"type\": \"s3\", \"bucket_url\": \"s3://test\"}, \"assets\": [{ \"type\": \"file\", \"src\": \"local\", \"dst\": \"remote\", \"src_path\": \"package\", \"dst_path\": \"/etc/package\", \"post_command\": [{ \"command\": \"echo 'Yay!'\", \"trigger\": \"on_changed\" }] }]}",
+			isNotNil,
+			isNil},
 	}
 
 	for _, test := range tests {
@@ -122,6 +125,105 @@ func TestParseManifest(t *testing.T) {
 			}
 			if e := test.errFunc(err); e != nil {
 				s.Errorf("invalid manifest load error: %v", e)
+			}
+		})
+	}
+}
+
+// TODO: test env var substitution
+func TestGetValue(t *testing.T) {
+	var tests = []struct {
+		name          string
+		attrSelector  func(manifest *ManifestNode) *AttributeNode
+		expectedValue any
+	}{
+		{
+			"string",
+			func(manifest *ManifestNode) *AttributeNode {
+				return manifest.Kinds["locations"].Items[0].Attributes["name"]
+			},
+			"local",
+		},
+		{
+			"[]string",
+			func(manifest *ManifestNode) *AttributeNode {
+				return manifest.Kinds["assets"].Items[0].Attributes["repository"]
+			},
+			[]string{"foo/bar/baz", "foo/bar/bing:1.2"},
+		},
+		{
+			"[]object (empty)",
+			func(manifest *ManifestNode) *AttributeNode {
+				return manifest.Kinds["assets"].Items[0].Attributes["post_command"]
+			},
+			[]map[string]string{},
+		},
+		{
+			"[]object (non-empty)",
+			func(manifest *ManifestNode) *AttributeNode {
+				return manifest.Kinds["assets"].Items[1].Attributes["post_command"]
+			},
+			[]map[string]string{
+				{"command": "echo 'Yay!'", "trigger": "on_changed"},
+				{"command": "echo 'Woah!'", "trigger": "always"},
+			},
+		},
+	}
+
+	json := `
+	{
+		"locations": [
+			{
+				"type": "local",
+				"name": "local"
+			},
+			{
+				"type": "ssh",
+				"name": "remote",
+				"server": "foo.com:22",
+				"username": "test",
+				"key_file": "/home/test/.ssh/key.pem"
+			}
+		],
+		"transport": {
+			"type": "s3",
+			"bucket_url":
+			"s3://test"
+		},
+		"assets": [
+			{
+				"type": "docker_image",
+				"name": "images",
+				"src": "local",
+				"dst": "*",
+				"repository": [
+					"foo/bar/baz",
+					"foo/bar/bing:1.2"
+				]
+			},
+			{
+				"type": "file",
+				"src": "local",
+				"dst": "remote",
+				"src_path": "package",
+				"dst_path": "/etc/package",
+				"post_command": [
+					{ "command": "echo 'Yay!'", "trigger": "on_changed" },
+					{ "command": "echo 'Woah!'", "trigger": "always" }
+				]
+			}
+		]
+	}`
+	manifest, err := ParseManifest([]byte(json))
+	if err != nil {
+		t.Fatalf("failed to parse initial manifest: %v", err)
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(s *testing.T) {
+			attr := test.attrSelector(manifest)
+			actualValue := attr.GetValue()
+			if !reflect.DeepEqual(test.expectedValue, actualValue) {
+				s.Errorf("values differ - expected %v, got %v", test.expectedValue, actualValue)
 			}
 		})
 	}

@@ -35,8 +35,6 @@ type AttributeNode struct {
 // We're going to (unwisely) assume this is used safely to avoid some
 // code duplication.
 
-// TODO: Transform the underlying values into correct one for return (spec. []object & []string)
-// before returning so simple casts can work
 func (a *AttributeNode) GetValue() any {
 	if a.MatchingValueType == "string" {
 		valStr := a.value.(string)
@@ -50,6 +48,31 @@ func (a *AttributeNode) GetValue() any {
 			finalValStrs = append(finalValStrs, subVarValue(v))
 		}
 		return finalValStrs
+	}
+	if a.MatchingValueType == "[]object" {
+		// This is a bit crazy. For the separate casting paths see the comment in checkValueType.
+		// For the nested map conversion - we need to do a pretty deep copy-and-cast to get a
+		// map[string]any into a map[string]string (unless I'm a total idiot). This should already
+		// have been validated in checkValueType so we "know" these are really map[string]string.
+		var valObjs []map[string]string
+		rawObjs, ok := a.value.([]any)
+		if ok {
+			rawObjMaps := util.Map(rawObjs, func(x any) map[string]any { return x.(map[string]any) })
+			valObjs = util.Map(rawObjMaps, func(x map[string]any) map[string]string {
+				return util.MapMap(x, func(k string, v any) (string, string) { return k, v.(string) })
+			})
+		} else {
+			valObjs = a.value.([]map[string]string)
+		}
+		finalValObjs := []map[string]string{}
+		for _, v := range valObjs {
+			v2 := map[string]string{}
+			for k, v := range v {
+				v2[k] = subVarValue(v)
+			}
+			finalValObjs = append(finalValObjs, v2)
+		}
+		return finalValObjs
 	}
 	return a.value
 }
@@ -92,7 +115,7 @@ func ParseManifest(raw []byte) (*ManifestNode, error) {
 	manifestSpec := NewManifestSpec()
 
 	kindNames := util.NewSet(util.Map(manifestSpec.Kinds, func(k ManifestKindSpec) string { return k.Name() })...)
-	for k, _ := range manifestObj {
+	for k := range manifestObj {
 		if !kindNames.Contains(k) {
 			errs = append(errs, fmt.Errorf("<root>: unrecognized top-level key '%s'", k))
 		}
@@ -262,14 +285,35 @@ func checkValueType(v any, types []string) (string, error) {
 				validType = t
 			}
 		case "[]string":
-			_, ok := v.([]string)
-			if ok && validType == "" {
-				validType = t
+			xs, ok := v.([]any)
+			if ok {
+				allStrings := util.All(xs, func(x any) bool { _, ok := x.(string); return ok })
+				if allStrings && validType == "" {
+					validType = t
+				}
 			}
 		case "[]object":
-			_, ok := v.([]map[string]any)
-			if ok && validType == "" {
-				validType = t
+			// This is a little tricky. An empty slice of type []map[string]string does not cast to []any,
+			// so we have a special check for specifically empty slices (the else block).
+			xs, ok := v.([]any)
+			if ok {
+				allObjects := util.All(xs,
+					func(x any) bool {
+						xmap, ok := x.(map[string]any)
+						if !ok {
+							return false
+						}
+						allStrings := util.All(util.Values(xmap), func(x2 any) bool { _, ok := x2.(string); return ok })
+						return allStrings
+					})
+				if allObjects && validType == "" {
+					validType = t
+				}
+			} else {
+				_, ok := v.([]map[string]string)
+				if ok && validType == "" {
+					validType = t
+				}
 			}
 		default:
 			return "", fmt.Errorf("invalid attribute type: %s", t)

@@ -63,6 +63,15 @@ func Map[S any, T any](xs []S, f func(S) T) []T {
 	return ys
 }
 
+func MapMap[K1 comparable, V1 any, K2 comparable, V2 any](xs map[K1]V1, f func(K1, V1) (K2, V2)) map[K2]V2 {
+	ys := map[K2]V2{}
+	for k1, v1 := range xs {
+		k2, v2 := f(k1, v1)
+		ys[k2] = v2
+	}
+	return ys
+}
+
 func Filter[T any](xs []T, p func(T) bool) []T {
 	ys := []T{}
 	for _, x := range xs {

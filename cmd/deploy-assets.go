@@ -100,6 +100,7 @@ func main() {
 				}
 			}
 
+			// TODO: "Dry run" these guys as well
 			for _, postCommand := range providerConfig.PostCommands {
 				if !*dryRunParam &&
 					(postCommand.Trigger == "always" ||
