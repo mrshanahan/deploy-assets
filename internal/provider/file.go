@@ -221,7 +221,7 @@ func (p *fileProvider) Sync(cfg config.SyncConfig) (config.SyncResult, error) {
 				"dst-path", dstPath, "dst-modified-at", dstModifiedAt)
 		}
 
-		return config.SYNC_RESULT_NOCHANGE, nil
+		return changeType, nil
 	}
 
 	tempFolderPath := util.GetTempFilePath("deploy-assets-file")

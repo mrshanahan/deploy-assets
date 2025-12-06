@@ -52,7 +52,7 @@ func (p *dockerProvider) Sync(cfg config.SyncConfig) (config.SyncResult, error) 
 		for _, e := range entriesToTransfer {
 			slog.Info("DRY RUN: copy", "image", e)
 		}
-		return config.SYNC_RESULT_NOCHANGE, nil
+		return changeType, nil
 	}
 
 	tempPath := util.GetTempFilePath("deploy-assets-docker")

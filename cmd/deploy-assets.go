@@ -100,34 +100,43 @@ func main() {
 				}
 			}
 
-			// TODO: "Dry run" these guys as well
 			for _, postCommand := range providerConfig.PostCommands {
-				if !*dryRunParam &&
-					(postCommand.Trigger == "always" ||
-						(syncResult != config.SYNC_RESULT_NOCHANGE && postCommand.Trigger == "on_changed") ||
-						(syncResult == config.SYNC_RESULT_CREATED && postCommand.Trigger == "on_created") ||
-						(syncResult == config.SYNC_RESULT_UPDATED && postCommand.Trigger == "on_updated")) {
-					slog.Info("executing post-command",
-						"command", postCommand.Command,
-						"trigger", postCommand.Trigger,
-						"synced", syncResult,
-						"asset", providerConfig.Provider.Name(),
-						"src", srcExecutor.Name(),
-						"dst", dstExecutor.Name())
-					stdout, stderr, err := dstExecutor.ExecuteShell(postCommand.Command)
-					if err != nil {
-						slog.Error("failed to execute post-command",
+				if postCommand.Trigger == "always" ||
+					(syncResult != config.SYNC_RESULT_NOCHANGE && postCommand.Trigger == "on_changed") ||
+					(syncResult == config.SYNC_RESULT_CREATED && postCommand.Trigger == "on_created") ||
+					(syncResult == config.SYNC_RESULT_UPDATED && postCommand.Trigger == "on_updated") {
+
+					if !*dryRunParam {
+						slog.Info("executing post-command",
+							"command", postCommand.Command,
+							"trigger", postCommand.Trigger,
+							"synced", syncResult,
 							"asset", providerConfig.Provider.Name(),
 							"src", srcExecutor.Name(),
-							"dst", dstExecutor.Name(),
-							"err", err,
-							"stdout", stdout,
-							"stderr", stderr)
-						if !*continueOnErrorParam {
-							os.Exit(1)
-						} else {
-							slog.Warn("continuing with remaining destinations despite error")
+							"dst", dstExecutor.Name())
+						stdout, stderr, err := dstExecutor.ExecuteShell(postCommand.Command)
+						if err != nil {
+							slog.Error("failed to execute post-command",
+								"asset", providerConfig.Provider.Name(),
+								"src", srcExecutor.Name(),
+								"dst", dstExecutor.Name(),
+								"err", err,
+								"stdout", stdout,
+								"stderr", stderr)
+							if !*continueOnErrorParam {
+								os.Exit(1)
+							} else {
+								slog.Warn("continuing with remaining destinations despite error")
+							}
 						}
+					} else {
+						slog.Info("DRY RUN: executing post-command",
+							"command", postCommand.Command,
+							"trigger", postCommand.Trigger,
+							"synced", syncResult,
+							"asset", providerConfig.Provider.Name(),
+							"src", srcExecutor.Name(),
+							"dst", dstExecutor.Name())
 					}
 				} else {
 					slog.Debug("skipping post-command execution",
