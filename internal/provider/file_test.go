@@ -312,7 +312,7 @@ func executeTest(test testDef, t *testing.T) {
 	dstFile := filepath.Join(dstRootPath, test.dstRelativePath)
 
 	// TODO: Look at how we parameterize these guys. This is a little awkward.
-	sut := NewFileProvider("test", srcFile, dstFile, test.recursive)
+	sut := NewFileProvider("test", srcFile, dstFile, test.recursive, false)
 	config := config.SyncConfig{
 		SrcExecutor: srcExecutor,
 		DstExecutor: dstExecutor,

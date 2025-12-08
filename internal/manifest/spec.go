@@ -173,6 +173,7 @@ func (s *FileAssetItemSpec) Attributes() []AttributeSpec {
 			RequiredAttribute("src_path", "string"),
 			RequiredAttribute("dst_path", "string"),
 			OptionalAttribute("recursive", "bool", false),
+			OptionalAttribute("force", "bool", false),
 		}...,
 	)
 }

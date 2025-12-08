@@ -166,7 +166,8 @@ func buildProviders(root *ManifestNode, manifest *Manifest) []error {
 			srcPath := a.Attributes["src_path"].GetValue().(string)
 			dstPath := a.Attributes["dst_path"].GetValue().(string)
 			recursive := a.Attributes["recursive"].GetValue().(bool)
-			providerConfig.Provider = provider.NewFileProvider(name, srcPath, dstPath, recursive)
+			force := a.Attributes["force"].GetValue().(bool)
+			providerConfig.Provider = provider.NewFileProvider(name, srcPath, dstPath, recursive, force)
 		case "docker_image":
 			compareLabel := a.Attributes["compare_label"].GetValue().(string)
 			repositoryAttr := a.Attributes["repository"]

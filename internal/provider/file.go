@@ -12,8 +12,8 @@ import (
 	"github.com/mrshanahan/deploy-assets/internal/util"
 )
 
-func NewFileProvider(name, srcPath, dstPath string, recursive bool) config.Provider {
-	return &fileProvider{name, srcPath, dstPath, recursive, make(map[string]*fileEntry), make(map[string]map[string]*fileEntry)}
+func NewFileProvider(name, srcPath, dstPath string, recursive bool, force bool) config.Provider {
+	return &fileProvider{name, srcPath, dstPath, recursive, force, make(map[string]*fileEntry), make(map[string]map[string]*fileEntry)}
 }
 
 type fileProvider struct {
@@ -21,6 +21,7 @@ type fileProvider struct {
 	srcPath    string
 	dstPath    string
 	recursive  bool
+	force      bool
 	srcEntries map[string]*fileEntry
 	dstEntries map[string]map[string]*fileEntry
 }
@@ -187,8 +188,8 @@ func (p *fileProvider) Sync(cfg config.SyncConfig) (config.SyncResult, error) {
 		}
 
 	} else {
-		if !dstFileInfo.DirExists {
-			return config.SYNC_RESULT_NOCHANGE, fmt.Errorf("target base directory does not exist")
+		if !dstFileInfo.DirExists && !p.force {
+			return config.SYNC_RESULT_NOCHANGE, fmt.Errorf("target base directory '%s' does not exist; if you want to forcibly create this directory, specify the force attribute", dstFileInfo.FullPath)
 		}
 
 		dstEntries = make(map[string]*fileEntry)
@@ -213,6 +214,8 @@ func (p *fileProvider) Sync(cfg config.SyncConfig) (config.SyncResult, error) {
 			srcPath, srcModifiedAt := e.Src.path, e.Src.modifiedAt.Format(time.RFC3339)
 			if e.Dst.fileEntry != nil {
 				dstPath, dstModifiedAt = e.Dst.path, e.Dst.fileEntry.modifiedAt.Format(time.RFC3339)
+			} else if !dstFileInfo.DirExists {
+				dstPath, dstModifiedAt = filepath.Join(dstFileInfo.FullPath, e.Src.relativePath), nil
 			} else {
 				dstPath, dstModifiedAt = nil, nil
 			}
