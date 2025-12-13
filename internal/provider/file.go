@@ -44,6 +44,7 @@ type mappedFileEntry struct {
 
 type fileInfo struct {
 	FullPath    string
+	DirPath     string
 	IsDirectory bool
 	Exists      bool
 	DirExists   bool
@@ -119,6 +120,7 @@ func getFileInfo(path string, executor config.Executor) (*fileInfo, error) {
 	if err != nil && stderr == "" {
 		return &fileInfo{
 			FullPath:    canonPath,
+			DirPath:     dirName,
 			IsDirectory: false,
 			Exists:      false,
 			DirExists:   false,
@@ -296,6 +298,13 @@ func (p *fileProvider) Sync(cfg config.SyncConfig) (config.SyncResult, error) {
 	} else {
 		srcName := filepath.Base(p.srcPath)
 		srcCopyPath = filepath.Join(tempPackageFolderPath, srcName)
+	}
+
+	if !dstFileInfo.DirExists {
+		if _, _, err := cfg.DstExecutor.ExecuteCommand("mkdir", "-p", dstFileInfo.DirPath); err != nil {
+			slog.Error("could not create dst parent directory", "dst", dstServerName, "dir", dstFileInfo.DirPath, "err", err)
+			return config.SYNC_RESULT_NOCHANGE, err
+		}
 	}
 
 	if _, _, err := cfg.DstExecutor.ExecuteShell(fmt.Sprintf("cp -ar %s %s", srcCopyPath, p.dstPath)); err != nil {

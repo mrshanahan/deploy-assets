@@ -53,6 +53,14 @@ func (s Set[T]) Contains(x T) bool {
 	return prs
 }
 
+func (s Set[T]) Length() int {
+	return len(s.m)
+}
+
+func (s Set[T]) AsSlice() []T {
+	return Keys(s.m)
+}
+
 // func (s Set[T]) Union(xs ...T)
 
 func Map[S any, T any](xs []S, f func(S) T) []T {

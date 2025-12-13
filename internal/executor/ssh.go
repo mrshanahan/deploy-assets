@@ -56,6 +56,7 @@ func (c *sshClient) Close() {
 func (c *sshClient) runCommandInSession(cmd string) (string, string, error) {
 	// TODO: Create single folder for all these files & then delete them
 
+	slog.Debug("executing ssh command", "cmd", cmd)
 	scriptPathBase64 := util.GetTempFilePath("deploy-assets-ssh-b64")
 	scriptContentsBase64 := base64.StdEncoding.EncodeToString([]byte(cmd))
 	stdout, stderr, err := c.executeCommand(fmt.Sprintf("echo '%s' > %s", scriptContentsBase64, scriptPathBase64))
@@ -83,6 +84,7 @@ func (c *sshClient) runCommandInSession(cmd string) (string, string, error) {
 	}
 
 	stdout, stderr, err = c.executeCommandWithLogging(runCmd)
+	slog.Debug("executed ssh command", "cmd", cmd, "stdout", stdout, "stderr", stderr, "err", err)
 	return stdout, stderr, err
 }
 
@@ -102,7 +104,7 @@ func (c *sshClient) executeCommand(cmd string) (string, string, error) {
 	err = session.Run(cmd)
 	stdout := stdoutBuffer.String()
 	stderr := stderrBuffer.String()
-	slog.Debug("executed ssh command", "cmd", cmd, "stdout", stdout, "stderr", stderr, "err", err)
+	// slog.Debug("executed ssh command", "cmd", cmd, "stdout", stdout, "stderr", stderr, "err", err)
 	return stdout, stderr, err
 }
 
@@ -128,7 +130,7 @@ func (c *sshClient) executeCommandWithLogging(cmd string) (string, string, error
 	stderrMultiWriter := io.MultiWriter(stderrWriter, stderrBuilder)
 	session.Stderr = stderrMultiWriter
 
-	slog.Debug("executing ssh command", "cmd", cmd)
+	//slog.Debug("executing ssh command", "cmd", cmd)
 	if err := session.Start(cmd); err != nil {
 		return "", "", fmt.Errorf("failed to start ssh command: %v", err)
 	}
@@ -159,14 +161,14 @@ func (c *sshClient) executeCommandWithLogging(cmd string) (string, string, error
 	}()
 
 	err = session.Wait()
-	slog.Debug("ssh command completed", "cmd", cmd, "err", err)
+	//slog.Debug("ssh command completed", "cmd", cmd, "err", err)
 	stdoutWriter.Close()
 	stderrWriter.Close()
 	<-stderrDone
 	<-stdoutDone
 	stdout := stdoutBuilder.String()
 	stderr := stderrBuilder.String()
-	slog.Debug("executed ssh command", "cmd", cmd, "stdout", stdout, "stderr", stderr, "err", err)
+	//slog.Debug("executed ssh command", "cmd", cmd, "stdout", stdout, "stderr", stderr, "err", err)
 	return stdout, stderr, err
 }
 

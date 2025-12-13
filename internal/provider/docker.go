@@ -31,12 +31,12 @@ func (p *dockerProvider) Name() string { return p.name }
 
 // TODO: Clean up old temp folders (?)
 func (p *dockerProvider) Sync(cfg config.SyncConfig) (config.SyncResult, error) {
-	srcEntries, err := loadDockerImageEntries(cfg.SrcExecutor, p.repositories, p.compareLabel)
+	srcEntries, err := loadDockerImageEntries(cfg.SrcExecutor, p.repositories, p.compareLabel, true)
 	if err != nil {
 		return config.SYNC_RESULT_NOCHANGE, err
 	}
 
-	dstEntries, err := loadDockerImageEntries(cfg.DstExecutor, p.repositories, p.compareLabel)
+	dstEntries, err := loadDockerImageEntries(cfg.DstExecutor, p.repositories, p.compareLabel, false)
 	if err != nil {
 		return config.SYNC_RESULT_NOCHANGE, err
 	}
@@ -138,7 +138,7 @@ func getEntriesToTransfer(src, dst map[string]*dockerImageEntry) ([]*dockerImage
 }
 
 // TODO: figure out digests - currently none of the images have digests
-func loadDockerImageEntries(executor config.Executor, repositories []string, compareLabel string) (map[string]*dockerImageEntry, error) {
+func loadDockerImageEntries(executor config.Executor, repositories []string, compareLabel string, failIfMissing bool) (map[string]*dockerImageEntry, error) {
 	var compareLabelFormat string
 	if compareLabel != "" {
 		// TODO: Make sure funky stuff can't happen here with a carefully-crafted label
@@ -147,42 +147,80 @@ func loadDockerImageEntries(executor config.Executor, repositories []string, com
 		compareLabelFormat = "{{ \"\" }}"
 	}
 
-	dockerInspectFormat := fmt.Sprintf("{{ index .RepoTags 0 }},{{ .ID }},{{ .Created }},%s", compareLabelFormat)
-	dockerArgs := []string{"image", "inspect", "--format", dockerInspectFormat}
-	dockerArgs = append(dockerArgs, repositories...)
-
-	stdout, _, err := executor.ExecuteCommand("docker", dockerArgs...)
+	dockerListArgs := []string{"image", "ls", "--format", "{{ .Repository }}:{{ .Tag }}"}
+	for _, r := range repositories {
+		dockerListArgs = append(dockerListArgs, "--filter", fmt.Sprintf("reference=%s", r))
+	}
+	stdout, _, err := executor.ExecuteCommand("docker", dockerListArgs...)
 	if err != nil {
 		return nil, err
 	}
 
-	entries, err := parseDockerImageEntries(stdout)
-	if err != nil {
-		return nil, err
+	missingRepos := checkMissingRepositories(stdout, repositories)
+	if failIfMissing && missingRepos.Length() > 0 {
+		return nil, fmt.Errorf("missing the following repositories in %s: %v", executor.Name(), missingRepos.AsSlice())
 	}
+	slog.Debug("docker image repositories missing in location", "repos", missingRepos.AsSlice())
 
-	for _, e := range entries {
-		if e.CompareValue == "" {
-			if compareLabel != "" {
-				slog.Warn("could not find compare_label label on image; defaulting to id",
-					"location", executor.Name(),
-					"image-repository", e.Repository,
-					"image-id", e.ID,
-					"label", compareLabel)
+	entriesMap := make(map[string]*dockerImageEntry)
+	existingRepos := util.Filter(repositories, func(r string) bool { return !missingRepos.Contains(r) })
+	if len(existingRepos) > 0 {
+		dockerInspectFormat := fmt.Sprintf("{{ index .RepoTags 0 }},{{ .ID }},{{ .Created }},%s", compareLabelFormat)
+		dockerArgs := []string{"image", "inspect", "--format", dockerInspectFormat}
+		dockerArgs = append(dockerArgs, existingRepos...)
+
+		stdout, _, err = executor.ExecuteCommand("docker", dockerArgs...)
+		if err != nil {
+			return nil, err
+		}
+
+		entries, err := parseDockerImageEntries(stdout)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, e := range entries {
+			if e.CompareValue == "" {
+				if compareLabel != "" {
+					slog.Warn("could not find compare_label label on image; defaulting to id",
+						"location", executor.Name(),
+						"image-repository", e.Repository,
+						"image-id", e.ID,
+						"label", compareLabel)
+				}
+				e.CompareValue = fmt.Sprintf("@id:%s", e.ID)
+			} else {
+				// If label is e.g. "foo.bar" and label value is "baz", then final CompareValue is "foo.bar:baz"
+				e.CompareValue = fmt.Sprintf("%s:%s", compareLabel, e.CompareValue)
 			}
-			e.CompareValue = fmt.Sprintf("@id:%s", e.ID)
-		} else {
-			// If label is e.g. "foo.bar" and label value is "baz", then final CompareValue is "foo.bar:baz"
-			e.CompareValue = fmt.Sprintf("%s:%s", compareLabel, e.CompareValue)
+		}
+
+		for _, e := range entries {
+			entriesMap[e.Repository] = e
 		}
 	}
 
-	entriesMap := make(map[string]*dockerImageEntry)
-	for _, e := range entries {
-		entriesMap[e.Repository] = e
+	for _, r := range missingRepos.AsSlice() {
+		entriesMap[r] = nil
 	}
 
 	return entriesMap, nil
+}
+
+func checkMissingRepositories(output string, repositories []string) util.Set[string] {
+	entries := strings.Split(strings.TrimSpace(output), "\n")
+	entriesLookup := util.NewSet(entries...)
+	missing := []string{}
+	for _, repo := range repositories {
+		fullRepoName := repo
+		if !strings.Contains(repo, ":") {
+			fullRepoName = fmt.Sprintf("%s:latest", repo)
+		}
+		if !entriesLookup.Contains(fullRepoName) {
+			missing = append(missing, repo)
+		}
+	}
+	return util.NewSet(missing...)
 }
 
 type dockerImageEntry struct {
