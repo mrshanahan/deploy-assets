@@ -100,6 +100,17 @@ func buildTransport(root *ManifestNode, manifest *Manifest) []error {
 	case "s3":
 		bucketUrl := t.Attributes["bucket_url"].GetValue().(string)
 		manifest.Transport = transport.NewS3Transport(name, bucketUrl)
+	case "scp":
+		addr := t.Attributes["server"].GetValue().(string)
+		user := t.Attributes["username"].GetValue().(string)
+		keyPath := t.Attributes["key_file"].GetValue().(string)
+		keyPassphrase := t.Attributes["key_file_passphrase"].GetValue().(string)
+		scpTransport, err := transport.NewScpTransport(name, addr, user, keyPath, keyPassphrase)
+		if err != nil {
+			errs = append(errs, err)
+		} else {
+			manifest.Transport = scpTransport
+		}
 	default:
 		errs = append(errs, fmt.Errorf("unknown transport type: %s", t.Type))
 	}

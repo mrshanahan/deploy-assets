@@ -15,6 +15,7 @@ func NewManifestSpec() *ManifestSpec {
 				GenericKindSpec: GenericKindSpec{
 					itemSpecs: []ManifestItemSpec{
 						&S3TransportItemSpec{},
+						&ScpTransportItemSpec{},
 					},
 				},
 			},
@@ -147,6 +148,22 @@ func (s *S3TransportItemSpec) Attributes() []AttributeSpec {
 		GetDefaultItemAttributes(),
 		[]AttributeSpec{
 			RequiredAttribute("bucket_url", "string"),
+		}...,
+	)
+}
+
+type ScpTransportItemSpec struct{}
+
+func (s *ScpTransportItemSpec) Type() string { return "scp" }
+
+func (s *ScpTransportItemSpec) Attributes() []AttributeSpec {
+	return append(
+		GetDefaultItemAttributes(),
+		[]AttributeSpec{
+			RequiredAttribute("server", "string"),
+			RequiredAttribute("username", "string"),
+			RequiredAttribute("key_file", "string"),
+			OptionalAttribute("key_file_passphrase", "string", ""),
 		}...,
 	)
 }
