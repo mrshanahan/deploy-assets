@@ -6,9 +6,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/mrshanahan/deploy-assets/internal/config"
 	"github.com/mrshanahan/deploy-assets/internal/manifest"
-	"github.com/mrshanahan/deploy-assets/internal/util"
+	"github.com/mrshanahan/deploy-assets/pkg/runner"
 )
 
 func main() {
@@ -18,12 +17,13 @@ func main() {
 	var continueOnErrorParam *bool = flag.Bool("continue-on-error", false, "If a particular asset fails, continue with remaining")
 	flag.Parse()
 
+	if *debugParam {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+	}
+
 	if *manifestParam == "" {
 		slog.Error("-manifest param required")
 		os.Exit(1)
-	}
-	if *debugParam {
-		slog.SetLogLoggerLevel(slog.LevelDebug)
 	}
 
 	manifestFile, err := os.Open(*manifestParam)
@@ -49,119 +49,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	for _, e := range util.Values(manifest.Executors) {
-		defer e.Close()
-	}
-
-	for _, providerConfig := range manifest.Providers {
-		src, dst := providerConfig.Src, providerConfig.Dst
-		srcExecutor := manifest.Executors[src]
-		var dstExecutors []config.Executor
-		if dst == "*" {
-			dstExecutors = util.Filter(util.Values(manifest.Executors), func(e config.Executor) bool { return e.Name() != src })
-		} else {
-			dstExecutors = []config.Executor{manifest.Executors[dst]}
-		}
-
-		if err := manifest.Transport.Validate(srcExecutor); err != nil {
-			slog.Error("failed to validate transport accessibility from source",
-				"src", src,
-				"err", err)
-			os.Exit(1)
-		}
-		for _, dstExecutor := range dstExecutors {
-			if err := manifest.Transport.Validate(dstExecutor); err != nil {
-				slog.Error("failed to validate transport accessibility from destination",
-					"dst", dstExecutor.Name(),
-					"err", err)
-				if !*continueOnErrorParam {
-					os.Exit(1)
-				} else {
-					slog.Warn("continuing with remaining destinations despite error")
-				}
-			}
-
-			syncResult, err := providerConfig.Provider.Sync(config.SyncConfig{
-				SrcExecutor: srcExecutor,
-				DstExecutor: dstExecutor,
-				Transport:   manifest.Transport,
-				DryRun:      *dryRunParam,
-			})
-			if err != nil {
-				slog.Error("failed to sync asset",
-					"asset", providerConfig.Provider.Name(),
-					"src", srcExecutor.Name(),
-					"dst", dstExecutor.Name(),
-					"err", err)
-				if !*continueOnErrorParam {
-					os.Exit(1)
-				} else {
-					slog.Warn("continuing with remaining destinations despite error")
-				}
-			}
-
-			for _, postCommand := range providerConfig.PostCommands {
-				if postCommand.Trigger == "always" ||
-					(syncResult != config.SYNC_RESULT_NOCHANGE && postCommand.Trigger == "on_changed") ||
-					(syncResult == config.SYNC_RESULT_CREATED && postCommand.Trigger == "on_created") ||
-					(syncResult == config.SYNC_RESULT_UPDATED && postCommand.Trigger == "on_updated") {
-
-					if !*dryRunParam {
-						slog.Info("executing post-command",
-							"command", postCommand.Command,
-							"trigger", postCommand.Trigger,
-							"synced", syncResult,
-							"asset", providerConfig.Provider.Name(),
-							"src", srcExecutor.Name(),
-							"dst", dstExecutor.Name())
-						stdout, stderr, err := dstExecutor.ExecuteShell(postCommand.Command)
-						if err != nil {
-							slog.Error("failed to execute post-command",
-								"asset", providerConfig.Provider.Name(),
-								"src", srcExecutor.Name(),
-								"dst", dstExecutor.Name(),
-								"err", err,
-								"stdout", stdout,
-								"stderr", stderr)
-							if !*continueOnErrorParam {
-								os.Exit(1)
-							} else {
-								slog.Warn("continuing with remaining destinations despite error")
-							}
-						}
-					} else {
-						slog.Info("DRY RUN: executing post-command",
-							"command", postCommand.Command,
-							"trigger", postCommand.Trigger,
-							"synced", syncResult,
-							"asset", providerConfig.Provider.Name(),
-							"src", srcExecutor.Name(),
-							"dst", dstExecutor.Name())
-					}
-				} else {
-					slog.Debug("skipping post-command execution",
-						"command", postCommand.Command,
-						"trigger", postCommand.Trigger,
-						"synced", syncResult,
-						"asset", providerConfig.Provider.Name(),
-						"src", srcExecutor.Name(),
-						"dst", dstExecutor.Name())
-				}
-			}
-		}
+	if err := runner.Execute(manifest, *dryRunParam, *continueOnErrorParam); err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
 	}
 }
-
-// func tryGetManifestPath() (string, error) {
-// 	cwd, err := os.Getwd()
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	dirEntries, err := os.ReadDir(cwd)
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	explicitManifestEntries :=
-// }
