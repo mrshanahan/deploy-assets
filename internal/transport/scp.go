@@ -3,8 +3,8 @@ package transport
 import (
 	"fmt"
 
-	"github.com/mrshanahan/deploy-assets/internal/config"
 	"github.com/mrshanahan/deploy-assets/internal/sshclient"
+	"github.com/mrshanahan/deploy-assets/pkg/config"
 	"golang.org/x/crypto/ssh"
 )
 

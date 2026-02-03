@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mrshanahan/deploy-assets/internal/config"
 	"github.com/mrshanahan/deploy-assets/internal/executor"
 	"github.com/mrshanahan/deploy-assets/internal/transport"
 	"github.com/mrshanahan/deploy-assets/internal/util"
+	"github.com/mrshanahan/deploy-assets/pkg/config"
 )
 
 func getCurrentFilePath() string {

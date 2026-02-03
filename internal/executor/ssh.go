@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mrshanahan/deploy-assets/internal/config"
 	"github.com/mrshanahan/deploy-assets/internal/sshclient"
 	"github.com/mrshanahan/deploy-assets/internal/util"
+	"github.com/mrshanahan/deploy-assets/pkg/config"
 	"golang.org/x/crypto/ssh"
 )
 

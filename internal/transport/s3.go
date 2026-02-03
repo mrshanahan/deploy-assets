@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/mrshanahan/deploy-assets/internal/config"
 	"github.com/mrshanahan/deploy-assets/internal/util"
+	"github.com/mrshanahan/deploy-assets/pkg/config"
 )
 
 func NewS3Transport(name string, bucketUrl string) config.Transport {

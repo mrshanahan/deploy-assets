@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/mrshanahan/deploy-assets/internal/manifest"
+	"github.com/mrshanahan/deploy-assets/pkg/manifest"
 	"github.com/mrshanahan/deploy-assets/pkg/runner"
 )
 

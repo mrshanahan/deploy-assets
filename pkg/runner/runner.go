@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/mrshanahan/deploy-assets/internal/config"
-	"github.com/mrshanahan/deploy-assets/internal/manifest"
 	"github.com/mrshanahan/deploy-assets/internal/util"
+	"github.com/mrshanahan/deploy-assets/pkg/config"
+	"github.com/mrshanahan/deploy-assets/pkg/manifest"
 )
 
 func Execute(m *manifest.Manifest, dryRun bool, continueOnError bool) error {

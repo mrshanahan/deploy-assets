@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mrshanahan/deploy-assets/internal/config"
 	"github.com/mrshanahan/deploy-assets/internal/util"
+	"github.com/mrshanahan/deploy-assets/pkg/config"
 )
 
 func NewFileProvider(name, srcPath, dstPath string, recursive bool, force bool) config.Provider {

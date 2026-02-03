@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mrshanahan/deploy-assets/internal/config"
 	"github.com/mrshanahan/deploy-assets/internal/executor"
 	"github.com/mrshanahan/deploy-assets/internal/provider"
 	"github.com/mrshanahan/deploy-assets/internal/transport"
+	"github.com/mrshanahan/deploy-assets/pkg/config"
 )
 
 type Manifest struct {
