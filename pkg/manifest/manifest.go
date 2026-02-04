@@ -3,6 +3,7 @@ package manifest
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 
 	"github.com/mrshanahan/deploy-assets/pkg/config"
 	"github.com/mrshanahan/deploy-assets/pkg/executor"
@@ -31,7 +32,11 @@ func (t *defaultNameTracker) GetName(kind string, typ string) string {
 	return fmt.Sprintf("%s%d", typ, val)
 }
 
-func BuildManifest(root *ManifestNode) (*Manifest, error) {
+func BuildManifest(manifestDir string, root *ManifestNode) (*Manifest, error) {
+	if !filepath.IsAbs(manifestDir) {
+		return nil, fmt.Errorf("manifest directory path must be absolute (was: %s)", manifestDir)
+	}
+
 	manifest := &Manifest{
 		Executors: map[string]config.Executor{},
 		Transport: nil,
@@ -40,7 +45,7 @@ func BuildManifest(root *ManifestNode) (*Manifest, error) {
 
 	errs := buildExecutors(root, manifest)
 	errs = append(errs, buildTransport(root, manifest)...)
-	errs = append(errs, buildProviders(root, manifest)...)
+	errs = append(errs, buildProviders(manifestDir, root, manifest)...)
 
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
@@ -118,7 +123,7 @@ func buildTransport(root *ManifestNode, manifest *Manifest) []error {
 	return errs
 }
 
-func buildProviders(root *ManifestNode, manifest *Manifest) []error {
+func buildProviders(manifestDir string, root *ManifestNode, manifest *Manifest) []error {
 	assetsNode := root.Kinds["assets"]
 	errs := []error{}
 	defaultNames := newDefaultNameTracker()
@@ -178,7 +183,7 @@ func buildProviders(root *ManifestNode, manifest *Manifest) []error {
 			dstPath := a.Attributes["dst_path"].GetValue().(string)
 			recursive := a.Attributes["recursive"].GetValue().(bool)
 			force := a.Attributes["force"].GetValue().(bool)
-			providerConfig.Provider = provider.NewFileProvider(name, srcPath, dstPath, recursive, force)
+			providerConfig.Provider = provider.NewFileProvider(name, manifestDir, srcPath, dstPath, recursive, force)
 		case "docker_image":
 			compareLabel := a.Attributes["compare_label"].GetValue().(string)
 			repositoryAttr := a.Attributes["repository"]

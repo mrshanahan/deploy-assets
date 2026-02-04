@@ -12,12 +12,13 @@ import (
 	"github.com/mrshanahan/deploy-assets/pkg/config"
 )
 
-func NewFileProvider(name, srcPath, dstPath string, recursive bool, force bool) config.Provider {
-	return &fileProvider{name, srcPath, dstPath, recursive, force, make(map[string]*fileEntry), make(map[string]map[string]*fileEntry)}
+func NewFileProvider(name, srcDir, srcPath, dstPath string, recursive bool, force bool) config.Provider {
+	return &fileProvider{name, srcDir, srcPath, dstPath, recursive, force, make(map[string]*fileEntry), make(map[string]map[string]*fileEntry)}
 }
 
 type fileProvider struct {
 	name       string
+	srcDir     string
 	srcPath    string
 	dstPath    string
 	recursive  bool
@@ -54,6 +55,8 @@ type fileInfo struct {
 // treat it as a collection of absolute paths mapped from one to the other. Fix this!
 
 func loadFileEntries(finfo *fileInfo, executor config.Executor, recursive bool) (map[string]*fileEntry, error) {
+	// NB: We do not set workingDir here as we should be solely using absolute paths.
+
 	server := executor.Name()
 	entries := make(map[string]*fileEntry)
 
@@ -103,11 +106,11 @@ func loadFileEntries(finfo *fileInfo, executor config.Executor, recursive bool) 
 	return entries, nil
 }
 
-func getFileInfo(path string, executor config.Executor) (*fileInfo, error) {
+func getFileInfo(workingDir string, path string, executor config.Executor) (*fileInfo, error) {
 	server := executor.Name()
 
 	// TODO: Paths ending in a return/newline will be incorrect after trim. I _hope_ we don't have to worry about this.
-	canonPath, stderr, err := executor.ExecuteShell(fmt.Sprintf("realpath -m \"%s\"", path))
+	canonPath, stderr, err := executor.ExecuteShellInDir(workingDir, fmt.Sprintf("realpath -m \"%s\"", path))
 	if err != nil {
 		slog.Error("failed to canonicalize path", "stderr", stderr, "err", err)
 		return nil, err
@@ -116,7 +119,7 @@ func getFileInfo(path string, executor config.Executor) (*fileInfo, error) {
 
 	dirName := filepath.Dir(canonPath)
 
-	stdout, stderr, err := executor.ExecuteShell(fmt.Sprintf("test -e \"%s\"", dirName))
+	stdout, stderr, err := executor.ExecuteShellInDir(workingDir, fmt.Sprintf("test -e \"%s\"", dirName))
 	if err != nil && stderr == "" {
 		return &fileInfo{
 			FullPath:    canonPath,
@@ -130,7 +133,7 @@ func getFileInfo(path string, executor config.Executor) (*fileInfo, error) {
 		return nil, err
 	}
 
-	stdout, stderr, err = executor.ExecuteShell(fmt.Sprintf("test -e \"%s\"", canonPath))
+	stdout, stderr, err = executor.ExecuteShellInDir(workingDir, fmt.Sprintf("test -e \"%s\"", canonPath))
 	if err != nil && stderr == "" {
 		return &fileInfo{
 			FullPath:    canonPath,
@@ -143,7 +146,7 @@ func getFileInfo(path string, executor config.Executor) (*fileInfo, error) {
 		return nil, err
 	}
 
-	fileType, stderr, err := executor.ExecuteShell(fmt.Sprintf("stat \"%s\" -c %%F", canonPath))
+	fileType, stderr, err := executor.ExecuteShellInDir(workingDir, fmt.Sprintf("stat \"%s\" -c %%F", canonPath))
 	if err != nil {
 		slog.Error("failed to get file type", "server", server, "path", canonPath, "stdout", fileType, "stderr", stderr, "err", err)
 		return nil, err
@@ -162,7 +165,7 @@ func (p *fileProvider) Name() string { return p.name }
 
 // TODO: Combine tmp file usage, both in code & on system
 func (p *fileProvider) Sync(cfg config.SyncConfig) (config.SyncResult, error) {
-	srcFileInfo, err := getFileInfo(p.srcPath, cfg.SrcExecutor)
+	srcFileInfo, err := getFileInfo(p.srcDir, p.srcPath, cfg.SrcExecutor)
 	if err != nil {
 		return config.SYNC_RESULT_NOCHANGE, err
 	}
@@ -171,7 +174,7 @@ func (p *fileProvider) Sync(cfg config.SyncConfig) (config.SyncResult, error) {
 		return config.SYNC_RESULT_NOCHANGE, fmt.Errorf("src file is missing")
 	}
 
-	dstFileInfo, err := getFileInfo(p.dstPath, cfg.DstExecutor)
+	dstFileInfo, err := getFileInfo("", p.dstPath, cfg.DstExecutor)
 	if err != nil {
 		return config.SYNC_RESULT_NOCHANGE, err
 	}

@@ -33,6 +33,10 @@ func NewSSHExecutor(name string, addr string, user string, keyPath string, keyPa
 func (c *sshClient) Name() string { return c.name }
 
 func (c *sshClient) ExecuteCommand(name string, args ...string) (string, string, error) {
+	return c.ExecuteCommandInDir("", name, args...)
+}
+
+func (c *sshClient) ExecuteCommandInDir(workingDir string, name string, args ...string) (string, string, error) {
 	var s strings.Builder
 	s.WriteString(name)
 	for _, a := range args {
@@ -41,11 +45,15 @@ func (c *sshClient) ExecuteCommand(name string, args ...string) (string, string,
 		s.WriteString(a)
 		s.WriteRune('\'')
 	}
-	return c.runCommandInSession(s.String())
+	return c.runCommandInSession(workingDir, s.String())
+}
+
+func (c *sshClient) ExecuteShellInDir(workingDir string, cmd string) (string, string, error) {
+	return c.runCommandInSession(workingDir, cmd)
 }
 
 func (c *sshClient) ExecuteShell(cmd string) (string, string, error) {
-	return c.runCommandInSession(cmd)
+	return c.runCommandInSession("", cmd)
 }
 
 func (c *sshClient) Close() {
@@ -53,8 +61,13 @@ func (c *sshClient) Close() {
 }
 
 // TODO: Can we make this more efficient? I.e. re-using sessions
-func (c *sshClient) runCommandInSession(cmd string) (string, string, error) {
+func (c *sshClient) runCommandInSession(workingDir string, cmd string) (string, string, error) {
 	// TODO: Create single folder for all these files & then delete them
+
+	if workingDir != "" {
+		// TODO: Correctly escape working dir argument
+		cmd = fmt.Sprintf("cd '%s' && %s", workingDir, cmd)
+	}
 
 	slog.Debug("executing ssh command", "cmd", cmd)
 	scriptPathBase64 := util.GetTempFilePath("deploy-assets-ssh-b64")

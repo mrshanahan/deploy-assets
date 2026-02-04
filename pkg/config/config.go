@@ -3,7 +3,9 @@ package config
 type Executor interface {
 	Name() string
 	ExecuteCommand(name string, args ...string) (string, string, error)
+	ExecuteCommandInDir(workingDir string, name string, args ...string) (string, string, error)
 	ExecuteShell(cmd string) (string, string, error)
+	ExecuteShellInDir(workingDir string, cmd string) (string, string, error)
 	Close()
 }
 
