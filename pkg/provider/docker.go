@@ -29,6 +29,23 @@ type dockerProvider struct {
 
 func (p *dockerProvider) Name() string { return p.name }
 
+func (p *dockerProvider) Yaml() string {
+	return fmt.Sprintf(
+		`docker:
+    name: %s
+	repositories:
+%v
+    compare_label: %s`, p.name, buildRepositoryYaml(p.repositories), p.compareLabel)
+}
+
+func buildRepositoryYaml(repositories []string) string {
+	lines := []string{}
+	for _, r := range repositories {
+		lines = append(lines, fmt.Sprintf("        - %s", r))
+	}
+	return strings.Join(lines, "\n")
+}
+
 // TODO: Clean up old temp folders (?)
 func (p *dockerProvider) Sync(cfg config.SyncConfig) (config.SyncResult, error) {
 	srcEntries, err := loadDockerImageEntries(cfg.SrcExecutor, p.repositories, p.compareLabel, true)

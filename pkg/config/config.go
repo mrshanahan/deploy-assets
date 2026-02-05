@@ -2,6 +2,7 @@ package config
 
 type Executor interface {
 	Name() string
+	Yaml() string
 	ExecuteCommand(name string, args ...string) (string, string, error)
 	ExecuteCommandInDir(workingDir string, name string, args ...string) (string, string, error)
 	ExecuteShell(cmd string) (string, string, error)
@@ -26,6 +27,7 @@ const (
 
 type Provider interface {
 	Name() string
+	Yaml() string
 	Sync(config SyncConfig) (SyncResult, error)
 }
 
@@ -43,5 +45,6 @@ type PostCommand struct {
 
 type Transport interface {
 	Validate(exec Executor) error
+	Yaml() string
 	TransferFile(src Executor, srcPath string, dst Executor, dstPath string) error
 }

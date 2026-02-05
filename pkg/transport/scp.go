@@ -21,6 +21,14 @@ type scpTransport struct {
 	client *ssh.Client
 }
 
+func (t *scpTransport) Yaml() string {
+	return fmt.Sprintf(
+		`scp:
+    name: %s
+	addr: %v
+	user: %s`, t.name, t.client.RemoteAddr(), t.client.User())
+}
+
 func (t *scpTransport) Validate(exec config.Executor) error {
 	_, _, err := exec.ExecuteShell("which scp")
 	if err != nil {

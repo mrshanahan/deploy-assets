@@ -163,6 +163,17 @@ func getFileInfo(workingDir string, path string, executor config.Executor) (*fil
 
 func (p *fileProvider) Name() string { return p.name }
 
+func (p *fileProvider) Yaml() string {
+	return fmt.Sprintf(
+		`file:
+    name: %s
+	src_dir: %s
+	src_path: %s
+	dst_path: %s
+	recursive: %t
+	force: %t`, p.name, p.srcDir, p.srcPath, p.dstPath, p.recursive, p.force)
+}
+
 // TODO: Combine tmp file usage, both in code & on system
 func (p *fileProvider) Sync(cfg config.SyncConfig) (config.SyncResult, error) {
 	srcFileInfo, err := getFileInfo(p.srcDir, p.srcPath, cfg.SrcExecutor)

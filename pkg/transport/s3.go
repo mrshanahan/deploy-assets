@@ -17,6 +17,13 @@ type s3Transport struct {
 	bucketUrl string
 }
 
+func (t *s3Transport) Yaml() string {
+	return fmt.Sprintf(
+		`s3:
+    name: %s
+	bucket_url: %s`, t.name, t.bucketUrl)
+}
+
 func (t *s3Transport) Validate(exec config.Executor) error {
 	if err := ValidateAWSCLIInstallation(exec); err != nil {
 		return fmt.Errorf("location '%s' does not have AWS CLI ('aws') available on PATH; install or update PATH & try again", exec.Name())

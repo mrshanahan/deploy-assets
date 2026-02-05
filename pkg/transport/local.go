@@ -14,6 +14,10 @@ func NewLocalTransport() config.Transport {
 
 type localTransport struct{}
 
+func (t *localTransport) Yaml() string {
+	return "local:"
+}
+
 func (t *localTransport) Validate(exec config.Executor) error {
 	return nil
 }

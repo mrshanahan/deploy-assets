@@ -23,6 +23,13 @@ func NewLocalExecutor(name string) config.Executor {
 
 func (e *localExecutor) Name() string { return e.name }
 
+func (e *localExecutor) Yaml() string {
+	return fmt.Sprintf(
+		`local:
+    name: %s
+`, e.name)
+}
+
 func (e *localExecutor) ExecuteCommandInDir(workingDir string, name string, args ...string) (string, string, error) {
 	command := exec.Command(name, args...)
 	if workingDir != "" {

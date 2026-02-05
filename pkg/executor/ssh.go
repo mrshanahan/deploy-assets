@@ -32,6 +32,15 @@ func NewSSHExecutor(name string, addr string, user string, keyPath string, keyPa
 
 func (c *sshClient) Name() string { return c.name }
 
+func (c *sshClient) Yaml() string {
+	return fmt.Sprintf(
+		`ssh:
+    name: %s
+	addr: %v
+	user: %s
+	run_elevated: %t`, c.name, c.client.RemoteAddr(), c.client.User(), c.runElevated)
+}
+
 func (c *sshClient) ExecuteCommand(name string, args ...string) (string, string, error) {
 	return c.ExecuteCommandInDir("", name, args...)
 }
