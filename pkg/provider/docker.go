@@ -29,19 +29,26 @@ type dockerProvider struct {
 
 func (p *dockerProvider) Name() string { return p.name }
 
-func (p *dockerProvider) Yaml() string {
+func (p *dockerProvider) Yaml(indent int) string {
+	propIndent := util.YamlIndentString(indent + util.TabsToIndent(1))
 	return fmt.Sprintf(
-		`docker:
-    name: %s
-	repositories:
+		`%sdocker:
+%sname: %s
+%srepositories:
 %v
-    compare_label: %s`, p.name, buildRepositoryYaml(p.repositories), p.compareLabel)
+%scompare_label: %s`,
+		util.YamlIndentString(indent),
+		propIndent, p.name,
+		propIndent,
+		buildRepositoryYaml(p.repositories, indent+util.TabsToIndent(2)),
+		propIndent, p.compareLabel)
 }
 
-func buildRepositoryYaml(repositories []string) string {
+func buildRepositoryYaml(repositories []string, indent int) string {
 	lines := []string{}
+	depthIndent := util.YamlIndentString(indent)
 	for _, r := range repositories {
-		lines = append(lines, fmt.Sprintf("        - %s", r))
+		lines = append(lines, fmt.Sprintf("%s- %s", depthIndent, r))
 	}
 	return strings.Join(lines, "\n")
 }

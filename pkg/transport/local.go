@@ -14,8 +14,8 @@ func NewLocalTransport() config.Transport {
 
 type localTransport struct{}
 
-func (t *localTransport) Yaml() string {
-	return "local:"
+func (t *localTransport) Yaml(indent int) string {
+	return util.YamlIndentString(indent) + "local:"
 }
 
 func (t *localTransport) Validate(exec config.Executor) error {

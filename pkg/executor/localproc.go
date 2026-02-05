@@ -23,11 +23,12 @@ func NewLocalExecutor(name string) config.Executor {
 
 func (e *localExecutor) Name() string { return e.name }
 
-func (e *localExecutor) Yaml() string {
+func (e *localExecutor) Yaml(indent int) string {
 	return fmt.Sprintf(
-		`local:
-    name: %s
-`, e.name)
+		`%slocal:
+%sname: %s`,
+		util.YamlIndentString(indent),
+		util.YamlIndentString(indent+util.TabsToIndent(1)), e.name)
 }
 
 func (e *localExecutor) ExecuteCommandInDir(workingDir string, name string, args ...string) (string, string, error) {

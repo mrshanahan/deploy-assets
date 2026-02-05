@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/mrshanahan/deploy-assets/internal/sshclient"
+	"github.com/mrshanahan/deploy-assets/internal/util"
 	"github.com/mrshanahan/deploy-assets/pkg/config"
 	"golang.org/x/crypto/ssh"
 )
@@ -21,12 +22,17 @@ type scpTransport struct {
 	client *ssh.Client
 }
 
-func (t *scpTransport) Yaml() string {
+func (t *scpTransport) Yaml(indent int) string {
+	propIndent := util.YamlIndentString(indent + util.TabsToIndent(1))
 	return fmt.Sprintf(
-		`scp:
-    name: %s
-	addr: %v
-	user: %s`, t.name, t.client.RemoteAddr(), t.client.User())
+		`%sscp:
+%sname: %s
+%saddr: %v
+%suser: %s`,
+		util.YamlIndentString(indent),
+		propIndent, t.name,
+		propIndent, t.client.RemoteAddr(),
+		propIndent, t.client.User())
 }
 
 func (t *scpTransport) Validate(exec config.Executor) error {

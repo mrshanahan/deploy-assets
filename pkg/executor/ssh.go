@@ -32,13 +32,19 @@ func NewSSHExecutor(name string, addr string, user string, keyPath string, keyPa
 
 func (c *sshClient) Name() string { return c.name }
 
-func (c *sshClient) Yaml() string {
+func (c *sshClient) Yaml(indent int) string {
+	propIndent := util.YamlIndentString(indent + util.TabsToIndent(1))
 	return fmt.Sprintf(
-		`ssh:
-    name: %s
-	addr: %v
-	user: %s
-	run_elevated: %t`, c.name, c.client.RemoteAddr(), c.client.User(), c.runElevated)
+		`%sssh:
+%sname: %s
+%saddr: %v
+%suser: %s
+%srun_elevated: %t`,
+		util.YamlIndentString(indent),
+		propIndent, c.name,
+		propIndent, c.client.RemoteAddr(),
+		propIndent, c.client.User(),
+		propIndent, c.runElevated)
 }
 
 func (c *sshClient) ExecuteCommand(name string, args ...string) (string, string, error) {

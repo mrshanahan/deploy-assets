@@ -163,15 +163,23 @@ func getFileInfo(workingDir string, path string, executor config.Executor) (*fil
 
 func (p *fileProvider) Name() string { return p.name }
 
-func (p *fileProvider) Yaml() string {
+func (p *fileProvider) Yaml(indent int) string {
+	propIndent := util.YamlIndentString(indent + util.TabsToIndent(1))
 	return fmt.Sprintf(
-		`file:
-    name: %s
-	src_dir: %s
-	src_path: %s
-	dst_path: %s
-	recursive: %t
-	force: %t`, p.name, p.srcDir, p.srcPath, p.dstPath, p.recursive, p.force)
+		`%sfile:
+%sname: %s
+%ssrc_dir: %s
+%ssrc_path: %s
+%sdst_path: %s
+%srecursive: %t
+%sforce: %t`,
+		util.YamlIndentString(indent),
+		propIndent, p.name,
+		propIndent, p.srcDir,
+		propIndent, p.srcPath,
+		propIndent, p.dstPath,
+		propIndent, p.recursive,
+		propIndent, p.force)
 }
 
 // TODO: Combine tmp file usage, both in code & on system

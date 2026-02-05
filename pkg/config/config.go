@@ -1,8 +1,15 @@
 package config
 
+import (
+	"fmt"
+	"strings"
+
+	"github.com/mrshanahan/deploy-assets/internal/util"
+)
+
 type Executor interface {
 	Name() string
-	Yaml() string
+	Yaml(depth int) string
 	ExecuteCommand(name string, args ...string) (string, string, error)
 	ExecuteCommandInDir(workingDir string, name string, args ...string) (string, string, error)
 	ExecuteShell(cmd string) (string, string, error)
@@ -27,7 +34,7 @@ const (
 
 type Provider interface {
 	Name() string
-	Yaml() string
+	Yaml(depth int) string
 	Sync(config SyncConfig) (SyncResult, error)
 }
 
@@ -38,13 +45,43 @@ type ProviderConfig struct {
 	PostCommands []*PostCommand
 }
 
+func (c *ProviderConfig) Yaml(indent int) string {
+	mainIndent := util.YamlIndentString(indent)
+	subpropIndent := util.YamlIndentString(indent + 2)
+	postCommandYamlLines := []string{}
+	for _, c := range c.PostCommands {
+		postCommandYamlLines = append(postCommandYamlLines, c.Yaml(indent+2+util.TabsToIndent(1)))
+	}
+	return fmt.Sprintf(
+		`%s- src: %s
+%sdst: %s
+%sprovider:
+%s
+%spost_commands:
+%s`,
+		mainIndent, c.Src,
+		subpropIndent, c.Dst,
+		subpropIndent, c.Provider.Yaml(indent+2+util.TabsToIndent(1)),
+		subpropIndent, strings.Join(postCommandYamlLines, "\n"))
+}
+
 type PostCommand struct {
 	Command string
 	Trigger string
 }
 
+func (c *PostCommand) Yaml(indent int) string {
+	mainIndent := util.YamlIndentString(indent)
+	subIndent := util.YamlIndentString(indent + 2)
+	return fmt.Sprintf(
+		`%s- command: "%s"
+%strigger: %s`,
+		mainIndent, c.Command,
+		subIndent, c.Trigger)
+}
+
 type Transport interface {
 	Validate(exec Executor) error
-	Yaml() string
+	Yaml(depth int) string
 	TransferFile(src Executor, srcPath string, dst Executor, dstPath string) error
 }

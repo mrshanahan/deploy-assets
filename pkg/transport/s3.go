@@ -17,11 +17,15 @@ type s3Transport struct {
 	bucketUrl string
 }
 
-func (t *s3Transport) Yaml() string {
+func (t *s3Transport) Yaml(indent int) string {
+	propIndent := util.YamlIndentString(indent + util.TabsToIndent(1))
 	return fmt.Sprintf(
-		`s3:
-    name: %s
-	bucket_url: %s`, t.name, t.bucketUrl)
+		`%ss3:
+%sname: %s
+%sbucket_url: %s`,
+		util.YamlIndentString(indent),
+		propIndent, t.name,
+		propIndent, t.bucketUrl)
 }
 
 func (t *s3Transport) Validate(exec config.Executor) error {

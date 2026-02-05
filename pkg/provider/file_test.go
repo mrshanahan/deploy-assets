@@ -45,6 +45,38 @@ const (
 	LATER_MOD_TIME = "2025-01-01T00:00:00Z"
 )
 
+func TestFileYamlDefault(t *testing.T) {
+	p := NewFileProvider("foobar", "/flim/flam", "boop/bap.txt", "blap/", true, false)
+	expected :=
+		`file:
+    name: foobar
+    src_dir: /flim/flam
+    src_path: boop/bap.txt
+    dst_path: blap/
+    recursive: true
+    force: false`
+	actual := p.Yaml(0)
+	if expected != actual {
+		t.Errorf("yaml contents not equal:\nexpected:\n=======\n%s\n=======\ngot:\n=======\n%s\n=======", expected, actual)
+	}
+}
+
+func TestFileYamlDeep(t *testing.T) {
+	p := NewFileProvider("foobar", "/flim/flam", "boop/bap.txt", "blap/", true, false)
+	expected :=
+		`        file:
+            name: foobar
+            src_dir: /flim/flam
+            src_path: boop/bap.txt
+            dst_path: blap/
+            recursive: true
+            force: false`
+	actual := p.Yaml(util.TabsToIndent(2))
+	if expected != actual {
+		t.Errorf("yaml contents not equal:\nexpected:\n=======\n%s\n=======\ngot:\n=======\n%s\n=======", expected, actual)
+	}
+}
+
 func TestSync(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
