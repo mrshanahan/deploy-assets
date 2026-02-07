@@ -52,17 +52,20 @@ func (c *ProviderConfig) Yaml(indent int) string {
 	for _, c := range c.PostCommands {
 		postCommandYamlLines = append(postCommandYamlLines, c.Yaml(indent+2+util.TabsToIndent(1)))
 	}
+	postCommandYaml := ""
+	if len(postCommandYamlLines) > 0 {
+		postCommandYaml = "\n" + strings.Join(postCommandYamlLines, "\n")
+	}
 	return fmt.Sprintf(
 		`%s- src: %s
 %sdst: %s
 %sprovider:
 %s
-%spost_commands:
-%s`,
+%spost_commands:%s`,
 		mainIndent, c.Src,
 		subpropIndent, c.Dst,
 		subpropIndent, c.Provider.Yaml(indent+2+util.TabsToIndent(1)),
-		subpropIndent, strings.Join(postCommandYamlLines, "\n"))
+		subpropIndent, postCommandYaml)
 }
 
 type PostCommand struct {

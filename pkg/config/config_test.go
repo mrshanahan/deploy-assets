@@ -103,3 +103,26 @@ func TestProviderConfigYamlDeep(t *testing.T) {
 		t.Errorf("yaml contents not equal:\nexpected:\n=======\n%s\n=======\ngot:\n=======\n%s\n=======", expected, actual)
 	}
 }
+
+func TestProviderConfigYamlNoCommands(t *testing.T) {
+	c := &ProviderConfig{
+		Provider:     &testProvider{"foobar", 5},
+		Src:          "hither",
+		Dst:          "thither",
+		PostCommands: []*PostCommand{},
+	}
+
+	expected :=
+		`- src: hither
+  dst: thither
+  provider:
+      file:
+          name: foobar
+          doodads: 5
+  post_commands:`
+
+	actual := c.Yaml(0)
+	if expected != actual {
+		t.Errorf("yaml contents not equal:\nexpected:\n=======\n%s\n=======\ngot:\n=======\n%s\n=======", expected, actual)
+	}
+}
