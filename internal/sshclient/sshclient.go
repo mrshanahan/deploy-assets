@@ -1,8 +1,10 @@
 package sshclient
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -42,6 +44,9 @@ func CreateSshClient(addr string, user string, keyPath string, keyPassphrase str
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
+	if !strings.Contains(addr, ":") {
+		addr = fmt.Sprintf("%s:22", addr)
+	}
 	slog.Debug("dialing ssh server", "addr", addr, "config", config)
 
 	client, err := ssh.Dial("tcp", addr, config)
