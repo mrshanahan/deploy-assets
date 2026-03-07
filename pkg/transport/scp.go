@@ -6,7 +6,6 @@ import (
 	"github.com/mrshanahan/deploy-assets/internal/sshclient"
 	"github.com/mrshanahan/deploy-assets/internal/util"
 	"github.com/mrshanahan/deploy-assets/pkg/config"
-	"golang.org/x/crypto/ssh"
 )
 
 func NewScpTransport(name string, addr string, user string, keyPath string, keyPassphrase string) (config.Transport, error) {
@@ -14,12 +13,17 @@ func NewScpTransport(name string, addr string, user string, keyPath string, keyP
 	if err != nil {
 		return nil, err
 	}
-	return &scpTransport{name, client}, nil
+	client.Close()
+
+	return &scpTransport{name, addr, user, keyPath, keyPassphrase}, nil
 }
 
 type scpTransport struct {
-	name   string
-	client *ssh.Client
+	name          string
+	addr          string
+	user          string
+	keyPath       string
+	keyPassphrase string
 }
 
 func (t *scpTransport) Yaml(indent int) string {
@@ -31,8 +35,8 @@ func (t *scpTransport) Yaml(indent int) string {
 %suser: %s`,
 		util.YamlIndentString(indent),
 		propIndent, t.name,
-		propIndent, t.client.RemoteAddr(),
-		propIndent, t.client.User())
+		propIndent, t.addr,
+		propIndent, t.user)
 }
 
 func (t *scpTransport) Validate(exec config.Executor) error {
@@ -44,6 +48,8 @@ func (t *scpTransport) Validate(exec config.Executor) error {
 }
 
 func (t *scpTransport) TransferFile(src config.Executor, srcPath string, dst config.Executor, dstPath string) error {
-	src.ExecuteCommand("scp", srcPath)
+	if _, _, err := src.ExecuteCommand("scp", "-i", t.keyPath, srcPath, fmt.Sprintf("%s@%s:%s", t.user, t.addr, dstPath)); err != nil {
+		return err
+	}
 	return nil
 }
