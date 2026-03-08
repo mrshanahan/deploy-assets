@@ -90,7 +90,7 @@ func (c *sshClient) runCommandInSession(workingDir string, cmd string) (string, 
 	stdout, stderr, err := c.executeCommand(fmt.Sprintf("echo '%s' > %s", scriptContentsBase64, scriptPathBase64))
 	if err != nil {
 		slog.Error("failed to create temp execution file", "executor", "ssh", "name", c.name, "run-elevated", c.runElevated, "stdout", stdout, "stderr", stderr, "err", err)
-		return "", "", nil
+		return "", "", err
 	}
 	defer c.executeCommand(fmt.Sprintf("rm %s", scriptPathBase64))
 
@@ -99,7 +99,7 @@ func (c *sshClient) runCommandInSession(workingDir string, cmd string) (string, 
 	stdout, stderr, err = c.executeCommand(fmt.Sprintf("cat %s | base64 -d > %s", scriptPathBase64, scriptPath))
 	if err != nil {
 		slog.Error("failed to create temp execution file", "executor", "ssh", "name", c.name, "run-elevated", c.runElevated, "stdout", stdout, "stderr", stderr, "err", err)
-		return "", "", nil
+		return "", "", err
 	}
 	defer c.executeCommand(fmt.Sprintf("rm %s", scriptPath))
 
