@@ -184,6 +184,10 @@ func buildProviders(manifestDir string, root *ManifestNode, manifest *Manifest) 
 			recursive := a.Attributes["recursive"].GetValue().(bool)
 			force := a.Attributes["force"].GetValue().(bool)
 			providerConfig.Provider = provider.NewFileProvider(name, manifestDir, srcPath, dstPath, recursive, force)
+		case "literal":
+			value := a.Attributes["value"].GetValue().(string)
+			dstPath := a.Attributes["dst_path"].GetValue().(string)
+			providerConfig.Provider = provider.NewLiteralProvider(name, value, dstPath)
 		case "docker_image":
 			compareLabel := a.Attributes["compare_label"].GetValue().(string)
 			repositoryAttr := a.Attributes["repository"]

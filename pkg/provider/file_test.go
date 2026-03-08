@@ -77,7 +77,7 @@ func TestFileYamlDeep(t *testing.T) {
 	}
 }
 
-func TestSync(t *testing.T) {
+func TestFileSync(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	var tests = []testDef{

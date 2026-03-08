@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const YamlIndentSize int = 4
+
 // Produces a whitespace indentation string for one level of a YAML object,
 // which in our case is 4 spaces. Panics if depth < 0.
 func YamlIndentString(indent int) string {
@@ -21,7 +23,18 @@ func TabsToIndent(tabs int) int {
 	return tabs * YamlIndentSize
 }
 
-const YamlIndentSize int = 4
+func IndentLines(value string, indent int) string {
+	builder := strings.Builder{}
+	lines := strings.Split(value, "\n")
+	indentStr := YamlIndentString(indent)
+	for i, l := range lines {
+		builder.WriteString(fmt.Sprintf("%s%s", indentStr, l))
+		if i < len(lines)-1 {
+			builder.WriteString("\n")
+		}
+	}
+	return builder.String()
+}
 
 // func Yaml(v any) string {
 // 	t := reflect.TypeOf(v)

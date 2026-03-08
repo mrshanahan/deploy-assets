@@ -168,8 +168,6 @@ func (s *ScpTransportItemSpec) Attributes() []AttributeSpec {
 	)
 }
 
-type FileAssetItemSpec struct{}
-
 func GetDefaultAssetItemAttributes() []AttributeSpec {
 	return append(
 		GetDefaultItemAttributes(),
@@ -181,6 +179,8 @@ func GetDefaultAssetItemAttributes() []AttributeSpec {
 	)
 }
 
+type FileAssetItemSpec struct{}
+
 func (s *FileAssetItemSpec) Type() string { return "file" }
 
 func (s *FileAssetItemSpec) Attributes() []AttributeSpec {
@@ -191,6 +191,20 @@ func (s *FileAssetItemSpec) Attributes() []AttributeSpec {
 			RequiredAttribute("dst_path", "string"),
 			OptionalAttribute("recursive", "bool", false),
 			OptionalAttribute("force", "bool", false),
+		}...,
+	)
+}
+
+type LiteralAssetItemSpec struct{}
+
+func (s *LiteralAssetItemSpec) Type() string { return "literal" }
+
+func (s *LiteralAssetItemSpec) Attributes() []AttributeSpec {
+	return append(
+		GetDefaultAssetItemAttributes(),
+		[]AttributeSpec{
+			RequiredAttribute("value", "string"),
+			RequiredAttribute("dst_path", "string"),
 		}...,
 	)
 }
