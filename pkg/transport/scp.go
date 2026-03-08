@@ -54,7 +54,10 @@ func (t *scpTransport) TransferFile(src config.Executor, srcPath string, dst con
 	dstTmpDirName := fmt.Sprintf("scp_%d", timestamp)
 	dstTmpDirPath := filepath.Join("/tmp/deploy-assets/", dstTmpDirName)
 	if _, _, err := dst.ExecuteCommand("mkdir", "-p", dstTmpDirPath); err != nil {
-		return fmt.Errorf("failed to create tmp directory on dst: %w", err)
+		return fmt.Errorf("failed to create tmp directory on remote: %w", err)
+	}
+	if _, _, err := dst.ExecuteCommand("chmod", "0777", dstTmpDirPath); err != nil {
+		return fmt.Errorf("failed to update permissions on tmp directory in remote: %w", err)
 	}
 
 	defer dst.ExecuteCommand("rm", "-rf", dstTmpDirPath)
