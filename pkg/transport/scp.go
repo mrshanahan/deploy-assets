@@ -2,6 +2,8 @@ package transport
 
 import (
 	"fmt"
+	"path/filepath"
+	"time"
 
 	"github.com/mrshanahan/deploy-assets/internal/sshclient"
 	"github.com/mrshanahan/deploy-assets/internal/util"
@@ -48,8 +50,23 @@ func (t *scpTransport) Validate(exec config.Executor) error {
 }
 
 func (t *scpTransport) TransferFile(src config.Executor, srcPath string, dst config.Executor, dstPath string) error {
-	if _, _, err := src.ExecuteCommand("scp", "-i", t.keyPath, srcPath, fmt.Sprintf("%s@%s:%s", t.user, t.addr, dstPath)); err != nil {
-		return err
+	timestamp := time.Now().UnixMicro()
+	dstTmpDirName := fmt.Sprintf("scp_%d", timestamp)
+	dstTmpDirPath := filepath.Join("/tmp/smt/", dstTmpDirName)
+	if _, _, err := dst.ExecuteCommand("mkdir", "-p", dstTmpDirPath); err != nil {
+		return fmt.Errorf("failed to create tmp directory on dst: %w", err)
 	}
+
+	defer dst.ExecuteCommand("rm", "-rf", dstTmpDirPath)
+
+	dstTmpFilePath := filepath.Join(dstTmpDirPath, "smt")
+	if _, _, err := src.ExecuteCommand("scp", "-i", t.keyPath, srcPath, fmt.Sprintf("%s@%s:%s", t.user, t.addr, dstTmpFilePath)); err != nil {
+		return fmt.Errorf("failed to transfer file to remote: %w", err)
+	}
+
+	if _, _, err := dst.ExecuteCommand("cp", dstTmpFilePath, dstPath); err != nil {
+		return fmt.Errorf("failed to copy file from temp path to final path on remote: %w", err)
+	}
+
 	return nil
 }
